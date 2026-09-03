@@ -19,6 +19,20 @@ import kotlin.math.roundToInt
 @Singleton
 class GeometryProcessor @Inject constructor() {
 
+    /** Crops [src] to [op]'s rectangle. Returns [src] when the crop is identity. */
+    fun crop(src: Bitmap, op: ImageOp.Crop): Bitmap {
+        if (op.isIdentity) return src
+        val rect = op.rect
+        // Convert fractional bounds to pixels, clamped so we never exceed the
+        // bitmap or produce a zero-size crop.
+        val left = (rect.left * src.width).roundToInt().coerceIn(0, src.width - 1)
+        val top = (rect.top * src.height).roundToInt().coerceIn(0, src.height - 1)
+        val width = (rect.width * src.width).roundToInt().coerceIn(1, src.width - left)
+        val height = (rect.height * src.height).roundToInt().coerceIn(1, src.height - top)
+        if (left == 0 && top == 0 && width == src.width && height == src.height) return src
+        return Bitmap.createBitmap(src, left, top, width, height)
+    }
+
     /** Rotates and/or flips [src] per [op]. Returns [src] when [op] is identity. */
     fun transform(src: Bitmap, op: ImageOp.Transform): Bitmap {
         if (op.isIdentity) return src

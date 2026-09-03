@@ -163,6 +163,15 @@ class EditorViewModel @Inject constructor(
         _uiState.update { it.copy(selectedTool = tool) }
     }
 
+    // --- Crop events ---
+
+    /** Stores a rectangular crop (fractions of the source) chosen in the cropper. */
+    fun onCropChanged(rect: NormalizedRect) =
+        updateAndPreview { it.copy(crop = ImageOp.Crop(rect)) }
+
+    /** Clears the crop (back to the full image). */
+    fun onResetCrop() = updateAndPreview { it.copy(crop = ImageOp.Crop()) }
+
     // --- Transform events ---
 
     /** Rotates the image 90° clockwise. */

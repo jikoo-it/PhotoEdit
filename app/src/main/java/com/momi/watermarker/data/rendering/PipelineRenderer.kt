@@ -56,6 +56,7 @@ class PipelineRenderer @Inject constructor(
         op: ImageOp,
         watermarkBitmaps: Map<String, Bitmap>,
     ): Bitmap = when (op) {
+        is ImageOp.Crop -> geometryProcessor.crop(source, op)
         is ImageOp.Transform -> geometryProcessor.transform(source, op)
         is ImageOp.Resize -> geometryProcessor.resize(source, op)
         is ImageOp.Filter -> colorProcessor.filter(source, op)

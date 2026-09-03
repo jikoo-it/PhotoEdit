@@ -39,6 +39,15 @@ sealed interface ImageOp {
         }
     }
 
+    /**
+     * Crops the image to a rectangular region, expressed as fractions of the
+     * source ([NormalizedRect]) so it is resolution-independent.
+     */
+    data class Crop(val rect: NormalizedRect = NormalizedRect.FULL) : ImageOp {
+        /** True when the crop covers the whole image (nothing is trimmed). */
+        val isIdentity: Boolean get() = rect == NormalizedRect.FULL
+    }
+
     /** Scales the image down, either by a percentage or to a maximum dimension. */
     data class Resize(
         val mode: ResizeMode = ResizeMode.PERCENT,

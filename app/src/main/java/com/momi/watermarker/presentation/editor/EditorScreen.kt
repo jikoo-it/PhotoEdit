@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PhotoSizeSelectLarge
+import androidx.compose.material.icons.filled.Rotate90DegreesCw
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Tune
@@ -121,6 +122,8 @@ fun EditorScreen(
     var showSaveDialog by remember { mutableStateOf(false) }
     // The image currently being cropped for use as a watermark, if any.
     var cropSourceUri by rememberSaveable { mutableStateOf<String?>(null) }
+    // The source image currently being cropped in the main editor, if any.
+    var mainCropUri by rememberSaveable { mutableStateOf<String?>(null) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia()
@@ -239,6 +242,11 @@ fun EditorScreen(
                     )
 
                     when (uiState.selectedTool) {
+                        EditorTool.CROP -> CropControls(
+                            state = uiState,
+                            viewModel = viewModel,
+                            onStartCrop = { mainCropUri = uiState.selectedSource?.uri },
+                        )
                         EditorTool.TRANSFORM -> TransformControls(
                             state = uiState,
                             viewModel = viewModel,
@@ -294,6 +302,20 @@ fun EditorScreen(
                     cropSourceUri = null
                 },
                 onCancel = { cropSourceUri = null },
+            )
+        }
+
+        // Rectangular crop of the main photo (no shape masking).
+        mainCropUri?.let { uri ->
+            ImageCropperScreen(
+                imageUri = uri,
+                title = "Crop photo",
+                showShapeSelector = false,
+                onConfirm = { rect, _ ->
+                    viewModel.onCropChanged(rect)
+                    mainCropUri = null
+                },
+                onCancel = { mainCropUri = null },
             )
         }
     }
@@ -551,6 +573,37 @@ private fun WatermarkControls(
 }
 
 @Composable
+private fun CropControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+    onStartCrop: () -> Unit,
+) {
+    val cropped = !state.crop.isIdentity
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(onClick = onStartCrop, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Filled.Crop, contentDescription = null)
+            Text(if (cropped) "  Adjust crop" else "  Crop photo")
+        }
+
+        Text(
+            text = if (cropped) {
+                val r = state.crop.rect
+                "Cropped to ${(r.width * 100).toInt()}% × ${(r.height * 100).toInt()}% of the original."
+            } else {
+                "Tap to open the cropper. The same crop is applied to every image in the batch."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (cropped) {
+            TextButton(onClick = viewModel::onResetCrop) { Text("Reset crop") }
+        }
+    }
+}
+
+@Composable
 private fun TransformControls(
     state: EditorUiState,
     viewModel: EditorViewModel,
@@ -785,7 +838,8 @@ private fun ToolSwitcher(
 /** Material icon shown for each tool in the switcher. */
 private val EditorTool.icon
     get() = when (this) {
-        EditorTool.TRANSFORM -> Icons.Filled.Crop
+        EditorTool.CROP -> Icons.Filled.Crop
+        EditorTool.TRANSFORM -> Icons.Filled.Rotate90DegreesCw
         EditorTool.RESIZE -> Icons.Filled.PhotoSizeSelectLarge
         EditorTool.FILTER -> Icons.Filled.FilterVintage
         EditorTool.ADJUST -> Icons.Filled.Tune

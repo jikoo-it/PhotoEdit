@@ -66,6 +66,13 @@ fun ImageCropperScreen(
     imageUri: String,
     onConfirm: (NormalizedRect, CropShape) -> Unit,
     onCancel: () -> Unit,
+    title: String = "Crop watermark",
+    /**
+     * When false, the shape picker is hidden and the crop is always a plain
+     * rectangle — used for cropping the main photo, where a masked (transparent)
+     * shape wouldn't make sense.
+     */
+    showShapeSelector: Boolean = true,
 ) {
     Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
         val painter = rememberAsyncImagePainter(model = imageUri)
@@ -79,7 +86,7 @@ fun ImageCropperScreen(
 
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
-                title = { Text("Crop watermark", color = Color.White) },
+                title = { Text(title, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
                         Icon(Icons.Filled.Close, contentDescription = "Cancel", tint = Color.White)
@@ -205,7 +212,9 @@ fun ImageCropperScreen(
                 }
             }
 
-            ShapeSelector(selected = shape, onSelect = { shape = it })
+            if (showShapeSelector) {
+                ShapeSelector(selected = shape, onSelect = { shape = it })
+            }
         }
     }
 }

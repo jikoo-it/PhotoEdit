@@ -30,6 +30,8 @@ data class EditorUiState(
     /** The rendered, watermarked preview of the selected source image. */
     val previewImage: WatermarkImage? = null,
     val config: WatermarkConfig = WatermarkConfig(text = "© MomiWaterMarker"),
+    /** Rectangular crop contributed by the Crop tool. */
+    val crop: ImageOp.Crop = ImageOp.Crop(),
     /** Rotate/flip settings contributed by the Transform tool. */
     val transform: ImageOp.Transform = ImageOp.Transform(),
     /** Downscale settings contributed by the Resize tool. */
@@ -63,6 +65,7 @@ data class EditorUiState(
     val pipeline: Pipeline
         get() = Pipeline(
             buildList {
+                if (!crop.isIdentity) add(crop)
                 if (!transform.isIdentity) add(transform)
                 if (!resize.isIdentity) add(resize)
                 if (!filter.isIdentity) add(filter)

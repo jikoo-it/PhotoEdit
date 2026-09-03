@@ -9,6 +9,7 @@ package com.momi.watermarker.presentation.editor
  * full set and swaps the control panel to match the selection.
  */
 enum class EditorTool(val label: String) {
+    CROP("Crop"),
     TRANSFORM("Transform"),
     RESIZE("Resize"),
     FILTER("Filters"),
