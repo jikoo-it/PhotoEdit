@@ -7,11 +7,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.momi.watermarker.presentation.editor.EditorScreen
+import com.momi.watermarker.presentation.AppRootScreen
 import com.momi.watermarker.presentation.theme.MomiWaterMarkerTheme
 import dagger.hilt.android.AndroidEntryPoint
 
-/** Single-activity host for the Compose UI. */
+/** Single-activity host for the Compose UI (image + video flows). */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             MomiWaterMarkerTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    EditorScreen()
+                    AppRootScreen()
                 }
             }
         }

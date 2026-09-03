@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun VideoEditorScreen(
     modifier: Modifier = Modifier,
     viewModel: VideoEditorViewModel = hiltViewModel(),
+    onExit: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -67,9 +68,9 @@ fun VideoEditorScreen(
     }
 
     val op = uiState.op
-    if (op != null) {
-        BackHandler { viewModel.onBack() }
-    }
+    // Within an op, back returns to the op-picker; at the op-picker, back
+    // leaves the video flow entirely (to the app section chooser).
+    BackHandler { if (op != null) viewModel.onBack() else onExit() }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -78,9 +79,9 @@ fun VideoEditorScreen(
             TopAppBar(
                 title = { Text(op?.title ?: "Momi Video") },
                 navigationIcon = {
-                    if (op != null) {
-                        TextButton(onClick = viewModel::onBack) { Text("‹ Back") }
-                    }
+                    TextButton(
+                        onClick = { if (op != null) viewModel.onBack() else onExit() },
+                    ) { Text("‹ Back") }
                 },
             )
         },
