@@ -4,6 +4,7 @@ import android.net.Uri
 import com.momi.watermarker.data.storage.ImageStorage
 import com.momi.watermarker.di.IoDispatcher
 import com.momi.watermarker.domain.model.CropShape
+import com.momi.watermarker.domain.model.ExportFormat
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.repository.MediaRepository
@@ -26,9 +27,10 @@ class MediaRepositoryImpl @Inject constructor(
     override suspend fun saveToGallery(
         image: WatermarkImage,
         displayName: String,
+        format: ExportFormat,
     ): Outcome<WatermarkImage> = withContext(dispatcher) {
         Outcome.catching {
-            val saved = imageStorage.saveToGallery(Uri.parse(image.uri), displayName)
+            val saved = imageStorage.saveToGallery(Uri.parse(image.uri), displayName, format)
             WatermarkImage(saved.toString())
         }
     }

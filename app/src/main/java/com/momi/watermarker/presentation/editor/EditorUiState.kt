@@ -1,5 +1,6 @@
 package com.momi.watermarker.presentation.editor
 
+import com.momi.watermarker.domain.model.ExportOptions
 import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.Pipeline
 import com.momi.watermarker.domain.model.WatermarkConfig
@@ -29,6 +30,12 @@ data class EditorUiState(
     /** The rendered, watermarked preview of the selected source image. */
     val previewImage: WatermarkImage? = null,
     val config: WatermarkConfig = WatermarkConfig(text = "© MomiWaterMarker"),
+    /** Rotate/flip settings contributed by the Transform tool. */
+    val transform: ImageOp.Transform = ImageOp.Transform(),
+    /** Downscale settings contributed by the Resize tool. */
+    val resize: ImageOp.Resize = ImageOp.Resize(),
+    /** Encoding (format + quality) applied at export by the Compress tool. */
+    val exportOptions: ExportOptions = ExportOptions(),
     val availablePatterns: List<WatermarkPattern> = emptyList(),
     val availableFonts: List<WatermarkFont> = emptyList(),
     val isRendering: Boolean = false,
@@ -44,18 +51,32 @@ data class EditorUiState(
 
     /**
      * The ordered edit pipeline assembled from the current tool settings. Ops are
-     * added in a fixed, sensible order and this same pipeline is applied to every
-     * image in the batch. Today it carries only the watermark; further tools
-     * (crop, resize, filters, ...) contribute their own ops here as they land.
+     * added in a fixed, sensible order (geometry first, watermark last) and this
+     * same pipeline is applied to every image in the batch. Compression is not an
+     * op — it is applied at export via [exportOptions]. Further tools (crop,
+     * filters, ...) contribute their own ops here as they land.
      */
     val pipeline: Pipeline
         get() = Pipeline(
             buildList {
+                if (!transform.isIdentity) add(transform)
+                if (!resize.isIdentity) add(resize)
                 if (config.isRenderable) add(ImageOp.Watermark(config))
             },
         )
 
-    val canSave: Boolean get() = hasImage && pipeline.isNotEmpty && !isSaving && !isRendering
+    /**
+     * Whether there is any edit to preview: a non-empty pipeline. (Export-only
+     * changes like compression have no visible preview, so they don't count here.)
+     */
+    val hasPreviewableEdits: Boolean get() = pipeline.isNotEmpty
+
+    /**
+     * Save is available whenever an image is loaded — even with no edits, since
+     * re-encoding per [exportOptions] (compression / format conversion) is itself
+     * a valid batch action.
+     */
+    val canSave: Boolean get() = hasImage && !isSaving && !isRendering
 }
 
 /** One-shot side effects the screen must react to (not part of durable state). */

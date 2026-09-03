@@ -32,9 +32,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BrandingWatermark
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PhotoSizeSelectLarge
+import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -49,6 +53,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -71,6 +76,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
+import com.momi.watermarker.domain.model.ExportFormat
+import com.momi.watermarker.domain.model.ResizeMode
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.model.WatermarkPattern
 import com.momi.watermarker.domain.model.WatermarkType
@@ -91,6 +98,9 @@ private val PRESET_COLORS = listOf(
     0xFF9C27B0.toInt(), // purple
     0xFFE91E63.toInt(), // pink
 )
+
+/** "Longest side" resize presets (in pixels) offered to the user. */
+private val MAX_DIMENSION_PRESETS = listOf(1024, 2048, 4096)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -226,6 +236,14 @@ fun EditorScreen(
                     )
 
                     when (uiState.selectedTool) {
+                        EditorTool.TRANSFORM -> TransformControls(
+                            state = uiState,
+                            viewModel = viewModel,
+                        )
+                        EditorTool.RESIZE -> ResizeControls(
+                            state = uiState,
+                            viewModel = viewModel,
+                        )
                         EditorTool.WATERMARK -> WatermarkControls(
                             state = uiState,
                             viewModel = viewModel,
@@ -234,6 +252,10 @@ fun EditorScreen(
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                 )
                             },
+                        )
+                        EditorTool.EXPORT -> ExportControls(
+                            state = uiState,
+                            viewModel = viewModel,
                         )
                     }
 
@@ -517,6 +539,148 @@ private fun WatermarkControls(
     }
 }
 
+@Composable
+private fun TransformControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+) {
+    val transform = state.transform
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ControlLabel("Rotate & flip")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = viewModel::onRotateClockwise, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Filled.RotateRight, contentDescription = null)
+                Text("  Rotate")
+            }
+            OutlinedButton(onClick = viewModel::onFlipHorizontal, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Filled.Flip, contentDescription = null)
+                Text("  Flip H")
+            }
+            OutlinedButton(onClick = viewModel::onFlipVertical, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Filled.Flip, contentDescription = null)
+                Text("  Flip V")
+            }
+        }
+
+        Text(
+            text = buildString {
+                append("Rotation ${transform.rotationDegrees}°")
+                if (transform.flipHorizontal) append(" · flipped horizontally")
+                if (transform.flipVertical) append(" · flipped vertically")
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (!transform.isIdentity) {
+            TextButton(onClick = viewModel::onResetTransform) { Text("Reset transform") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ResizeControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+) {
+    val resize = state.resize
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            ResizeMode.entries.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = resize.mode == mode,
+                    onClick = { viewModel.onResizeModeSelected(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index, ResizeMode.entries.size),
+                ) {
+                    Text(mode.label)
+                }
+            }
+        }
+
+        when (resize.mode) {
+            ResizeMode.PERCENT -> {
+                PercentSlider(
+                    label = "Scale",
+                    value = resize.percent,
+                    onValueChange = viewModel::onResizePercentChanged,
+                    valueRange = 0.05f..1f,
+                )
+            }
+            ResizeMode.LONGEST_SIDE -> {
+                ControlLabel("Longest side")
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    MAX_DIMENSION_PRESETS.forEachIndexed { index, px ->
+                        SegmentedButton(
+                            selected = resize.maxDimensionPx == px,
+                            onClick = { viewModel.onResizeMaxDimensionChanged(px) },
+                            shape = SegmentedButtonDefaults.itemShape(index, MAX_DIMENSION_PRESETS.size),
+                        ) {
+                            Text("$px")
+                        }
+                    }
+                }
+                Text(
+                    text = "Images larger than ${resize.maxDimensionPx}px on their longest " +
+                        "side are scaled down; smaller ones are left as-is.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        if (!resize.isIdentity) {
+            TextButton(onClick = viewModel::onResetResize) { Text("Reset to full size") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExportControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+) {
+    val export = state.exportOptions
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ControlLabel("Format")
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            ExportFormat.entries.forEachIndexed { index, format ->
+                SegmentedButton(
+                    selected = export.format == format,
+                    onClick = { viewModel.onExportFormatSelected(format) },
+                    shape = SegmentedButtonDefaults.itemShape(index, ExportFormat.entries.size),
+                ) {
+                    Text(format.label)
+                }
+            }
+        }
+
+        if (export.format.supportsQuality) {
+            ControlLabel("Quality: ${export.quality}")
+            Slider(
+                value = export.quality.toFloat(),
+                onValueChange = { viewModel.onExportQualityChanged(it.toInt()) },
+                valueRange = 10f..100f,
+            )
+            Text(
+                text = "Lower quality means smaller files.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Text(
+                text = "${export.format.label} is lossless; quality doesn't apply.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 /** A horizontally-scrolling row of editing tools; the selected one is highlighted. */
 @Composable
 private fun ToolSwitcher(
@@ -557,7 +721,10 @@ private fun ToolSwitcher(
 /** Material icon shown for each tool in the switcher. */
 private val EditorTool.icon
     get() = when (this) {
+        EditorTool.TRANSFORM -> Icons.Filled.Crop
+        EditorTool.RESIZE -> Icons.Filled.PhotoSizeSelectLarge
         EditorTool.WATERMARK -> Icons.Filled.BrandingWatermark
+        EditorTool.EXPORT -> Icons.Filled.Save
     }
 
 @Composable

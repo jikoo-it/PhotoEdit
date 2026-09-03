@@ -9,7 +9,10 @@ package com.momi.watermarker.presentation.editor
  * full set and swaps the control panel to match the selection.
  */
 enum class EditorTool(val label: String) {
-    WATERMARK("Watermark");
+    TRANSFORM("Transform"),
+    RESIZE("Resize"),
+    WATERMARK("Watermark"),
+    EXPORT("Export");
 
     companion object {
         val DEFAULT = WATERMARK

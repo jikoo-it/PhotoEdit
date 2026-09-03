@@ -190,14 +190,14 @@ class EditorViewModelTest {
             advanceUntilIdle()
             assertTrue(awaitItem() is EditorEffect.ShowMessage)
         }
-        coVerify(exactly = 0) { processAndSaveImages(any(), any()) }
+        coVerify(exactly = 0) { processAndSaveImages(any(), any(), any()) }
     }
 
     @Test
     fun `save renders and persists the whole batch`() = runTest {
         coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
-        coEvery { processAndSaveImages(any(), any()) } returns
+        coEvery { processAndSaveImages(any(), any(), any()) } returns
             BatchSaveResult(savedCount = 2, requested = 2, errors = emptyList())
 
         val vm = viewModel()
@@ -212,6 +212,7 @@ class EditorViewModelTest {
             processAndSaveImages(
                 listOf(WatermarkImage("content://a"), WatermarkImage("content://b")),
                 any(),
+                any(),
             )
         }
     }
@@ -220,7 +221,7 @@ class EditorViewModelTest {
     fun `save with delete requested asks the screen to remove originals`() = runTest {
         coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
-        coEvery { processAndSaveImages(any(), any()) } returns
+        coEvery { processAndSaveImages(any(), any(), any()) } returns
             BatchSaveResult(savedCount = 2, requested = 2, errors = emptyList())
 
         val vm = viewModel()
@@ -243,7 +244,7 @@ class EditorViewModelTest {
     fun `partial save failure skips original deletion`() = runTest {
         coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
-        coEvery { processAndSaveImages(any(), any()) } returns
+        coEvery { processAndSaveImages(any(), any(), any()) } returns
             BatchSaveResult(savedCount = 1, requested = 2, errors = listOf(RuntimeException("boom")))
 
         val vm = viewModel()

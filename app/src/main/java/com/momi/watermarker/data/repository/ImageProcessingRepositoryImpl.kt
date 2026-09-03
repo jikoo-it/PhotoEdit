@@ -5,6 +5,7 @@ import android.net.Uri
 import com.momi.watermarker.data.rendering.PipelineRenderer
 import com.momi.watermarker.data.storage.ImageStorage
 import com.momi.watermarker.di.DefaultDispatcher
+import com.momi.watermarker.domain.model.ExportOptions
 import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.Pipeline
 import com.momi.watermarker.domain.model.WatermarkImage
@@ -29,13 +30,19 @@ class ImageProcessingRepositoryImpl @Inject constructor(
     override suspend fun applyPipeline(
         source: WatermarkImage,
         pipeline: Pipeline,
+        export: ExportOptions,
     ): Outcome<WatermarkImage> = withContext(dispatcher) {
         Outcome.catching {
             val bitmap = imageStorage.decodeBitmap(Uri.parse(source.uri))
             val watermarkBitmaps = decodeWatermarkBitmaps(pipeline)
             try {
                 val result = renderer.render(bitmap, pipeline, watermarkBitmaps)
-                val outputUri = imageStorage.writeToCache(result, prefix = "processed")
+                val outputUri = imageStorage.writeToCache(
+                    bitmap = result,
+                    prefix = "processed",
+                    format = export.format,
+                    quality = export.effectiveQuality,
+                )
                 if (result !== bitmap) result.recycle()
                 WatermarkImage(outputUri.toString())
             } finally {

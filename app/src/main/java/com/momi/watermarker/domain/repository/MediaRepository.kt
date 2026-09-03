@@ -1,6 +1,7 @@
 package com.momi.watermarker.domain.repository
 
 import com.momi.watermarker.domain.model.CropShape
+import com.momi.watermarker.domain.model.ExportFormat
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.util.Outcome
@@ -23,11 +24,13 @@ interface MediaRepository {
 
     /**
      * Persists [image] into the shared gallery (MediaStore Pictures) under
-     * [displayName], returning a reference to the saved entry.
+     * [displayName], encoded as [format], returning a reference to the saved
+     * entry. [image] is expected to already be encoded in [format].
      */
     suspend fun saveToGallery(
         image: WatermarkImage,
         displayName: String,
+        format: ExportFormat,
     ): Outcome<WatermarkImage>
 
     /**

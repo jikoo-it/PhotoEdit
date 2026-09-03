@@ -3,7 +3,10 @@ package com.momi.watermarker.presentation.editor
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.momi.watermarker.domain.model.CropShape
+import com.momi.watermarker.domain.model.ExportFormat
+import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.NormalizedRect
+import com.momi.watermarker.domain.model.ResizeMode
 import com.momi.watermarker.domain.model.WatermarkConfig
 import com.momi.watermarker.domain.model.WatermarkFont
 import com.momi.watermarker.domain.model.WatermarkImage
@@ -159,6 +162,39 @@ class EditorViewModel @Inject constructor(
         _uiState.update { it.copy(selectedTool = tool) }
     }
 
+    // --- Transform events ---
+
+    /** Rotates the image 90° clockwise. */
+    fun onRotateClockwise() = updateTransform { it.rotatedClockwise() }
+
+    fun onFlipHorizontal() = updateTransform { it.copy(flipHorizontal = !it.flipHorizontal) }
+
+    fun onFlipVertical() = updateTransform { it.copy(flipVertical = !it.flipVertical) }
+
+    /** Clears all rotate/flip settings. */
+    fun onResetTransform() = updateTransform { ImageOp.Transform() }
+
+    // --- Resize events ---
+
+    fun onResizeModeSelected(mode: ResizeMode) = updateResize { it.copy(mode = mode) }
+
+    fun onResizePercentChanged(percent: Float) =
+        updateResize { it.copy(percent = percent.coerceIn(0.01f, 1f)) }
+
+    fun onResizeMaxDimensionChanged(maxDimensionPx: Int) =
+        updateResize { it.copy(maxDimensionPx = maxDimensionPx.coerceAtLeast(1)) }
+
+    /** Clears any downscaling (back to full size). */
+    fun onResetResize() = updateResize { ImageOp.Resize() }
+
+    // --- Export events ---
+
+    fun onExportFormatSelected(format: ExportFormat) =
+        _uiState.update { it.copy(exportOptions = it.exportOptions.copy(format = format)) }
+
+    fun onExportQualityChanged(quality: Int) =
+        _uiState.update { it.copy(exportOptions = it.exportOptions.copy(quality = quality.coerceIn(0, 100))) }
+
     // --- Watermark configuration events ---
 
     fun onWatermarkTypeSelected(type: WatermarkType) = updateConfig { it.copy(type = type) }
@@ -218,16 +254,15 @@ class EditorViewModel @Inject constructor(
             emitMessage("Nothing to save yet.")
             return
         }
-        if (state.pipeline.isEmpty) {
-            emitMessage("Add watermark text or choose a watermark image first.")
-            return
-        }
+        // An empty pipeline is fine — the images are re-encoded per the export
+        // options (batch compression / format conversion with no other edits).
         val pipeline = state.pipeline
+        val export = state.exportOptions
         val originals = if (deleteOriginals && state.canDeleteOriginals) sources.map { it.uri } else emptyList()
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
-            val result = processAndSaveImages(sources, pipeline)
+            val result = processAndSaveImages(sources, pipeline, export)
             _uiState.update { it.copy(isSaving = false) }
 
             when {
@@ -268,6 +303,16 @@ class EditorViewModel @Inject constructor(
 
     private fun updateConfig(transform: (WatermarkConfig) -> WatermarkConfig) {
         _uiState.update { it.copy(config = transform(it.config)) }
+        regeneratePreview()
+    }
+
+    private fun updateTransform(reduce: (ImageOp.Transform) -> ImageOp.Transform) {
+        _uiState.update { it.copy(transform = reduce(it.transform)) }
+        regeneratePreview()
+    }
+
+    private fun updateResize(reduce: (ImageOp.Resize) -> ImageOp.Resize) {
+        _uiState.update { it.copy(resize = reduce(it.resize)) }
         regeneratePreview()
     }
 
