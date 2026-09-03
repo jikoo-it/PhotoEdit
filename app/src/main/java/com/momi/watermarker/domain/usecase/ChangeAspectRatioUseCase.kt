@@ -8,24 +8,26 @@ import com.momi.watermarker.domain.util.Outcome
 import javax.inject.Inject
 
 /**
- * Trims [source] to the window [startMs, endMs], enforcing the domain rule that
- * the window is non-empty and ordered before any work is dispatched.
+ * Reframes [source] to the target [aspectRatio] (width / height), cropping to
+ * fill so the whole frame is used (no letterboxing).
  */
-class TrimVideoUseCase @Inject constructor(
+class ChangeAspectRatioUseCase @Inject constructor(
     private val videoRepository: VideoRepository,
 ) {
     suspend operator fun invoke(
         source: VideoClip,
-        startMs: Long,
-        endMs: Long,
+        aspectRatio: Float,
     ): Outcome<VideoClip> {
-        if (startMs < 0 || endMs <= startMs) {
+        if (aspectRatio <= 0f) {
             return Outcome.Failure(
-                IllegalArgumentException("Trim window must be positive (start < end)."),
+                IllegalArgumentException("Aspect ratio must be positive."),
             )
         }
         return videoRepository.export(
-            VideoEditRequest(segments = listOf(VideoSegment(source.uri, startMs, endMs))),
+            VideoEditRequest(
+                segments = listOf(VideoSegment(source.uri)),
+                aspectRatio = aspectRatio,
+            ),
         )
     }
 }

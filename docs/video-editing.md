@@ -3,7 +3,7 @@
 > Living document for the video-editing feature set on `feature/image-processing-suite`.
 > Captures research, decisions, the milestone plan, risks, and a running progress log.
 
-Last updated: 2026-09-03
+Last updated: 2026-09-03 (multi-op batch)
 
 ---
 
@@ -121,6 +121,43 @@ auto-captions. **Not on a release timeline.**
 
 ---
 
+## 4a. Delivered operations (single export pipeline)
+
+Every operation is expressed as one `VideoEditRequest` (domain) → `VideoTransformer.ExportSpec`
+(data) → a Media3 `Composition` of an `EditedMediaItemSequence`. Adding an operation means
+building a different request, **not** a new pipeline. Shipped so far:
+
+| Op | How | Status |
+|---|---|---|
+| Trim | 1 clipped segment | ✅ |
+| Cut & Join | N clipped segments, same source, concatenated | ✅ |
+| Merge | N whole segments, different sources, `experimentalSetForceAudioTrack(true)` | ✅ |
+| Remove Sound | `EditedMediaItem.setRemoveAudio(true)` | ✅ |
+| Aspect Ratio | `Presentation.createForAspectRatio(r, LAYOUT_SCALE_TO_FIT_WITH_CROP)` | ✅ |
+| Image Overlay | `OverlayEffect` + `BitmapOverlay` w/ `OverlaySettings.alphaScale` | ✅ |
+| Images → video (slideshow) | image `EditedMediaItem` + `setDurationUs`/`setFrameRate` (plumbing in `VideoSegment.isImage`; no UI yet) | ⏳ |
+
+UI: a single `VideoEditorActivity` hosts a home op-picker (`VideoOp`) that routes to a
+per-op flow; state lives in one `VideoEditorViewModel`/`VideoEditorUiState`. `Composition`
+sequence handles differing merge resolutions; `forceAudioTrack` covers differing audio presence.
+
+## 4b. Transitions — the one hard feature (planned, not built)
+
+Media3 1.5.1 has **no clip-to-clip transition API** (confirmed against the shipped jars:
+no crossfade/xfade on `EditedMediaItemSequence` or `Composition`). This applies equally to
+video↔video merges and image↔image slideshows. Approaches, in preference order:
+
+1. **Overlapping-sequence crossfade** — put clips on two `EditedMediaItemSequence`s in one
+   `Composition`, offset in time, and animate opacity at the boundary via a time-varying
+   `OverlayEffect`/alpha `Presentation`. All in-engine; medium-hard.
+2. **Custom GL `Effect`** (`GlShaderProgram`) implementing wipe/fade/slide shaders. Most
+   flexible, most work.
+3. **FFmpeg `xfade`** fallback — only if native routes stall (reintroduces the APK-size /
+   licensing costs we chose Media3 to avoid).
+
+Slideshow-with-transitions (combine images → video) is folded into this milestone since the
+transition machinery is the shared hard part.
+
 ## 5. Progress log
 
 - **2026-09-03** — Research complete; engine decision = Media3 Transformer; milestone
@@ -132,3 +169,12 @@ auto-captions. **Not on a release timeline.**
   binding lives in a dedicated `di/VideoModule.kt` so `RepositoryModule.kt` (and
   all other image-processing files) is never touched. Remaining for the spike:
   `VideoEditorScreen` + `HomeScreen` + navigation, then a full `assembleDebug`.
+- **2026-09-03** — Spike UI landed (pick → trim → export), installed & running on Pixel 8.
+- **2026-09-03** — Generalized the data layer to a single `export(VideoEditRequest)` pipeline
+  and shipped a multi-op suite: **Cut & Join, Merge, Remove Sound, Aspect Ratio, Image
+  Overlay** (plus existing Trim), each a distinct use case + home-screen flow. Confirmed the
+  exact Media3 1.5.1 API surface against the jars before coding (`EditedMediaItemSequence`,
+  `Composition.experimentalSetForceAudioTrack`, `Presentation`, `OverlayEffect`/`BitmapOverlay`).
+  Compiles clean; installed & verified on Pixel 8 (no crash). Slideshow plumbing added behind
+  `VideoSegment.isImage` (no UI). **Transitions** scoped as the next milestone (§4b) — no native
+  API, needs a crossfade compositor.

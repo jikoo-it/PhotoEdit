@@ -2,6 +2,8 @@ package com.momi.watermarker.data.storage
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Environment
@@ -46,6 +48,13 @@ class VideoStorage @Inject constructor(
             retriever.release()
         }
     }
+
+    /** Decodes the image at [uri] into a [Bitmap] (e.g. for a video overlay). */
+    fun decodeBitmap(uri: Uri): Bitmap =
+        context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "Cannot open input stream for $uri" }
+            BitmapFactory.decodeStream(input) ?: error("Could not decode image at $uri")
+        }
 
     /**
      * Copies the video at [sourceUri] into the device gallery

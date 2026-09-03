@@ -5,6 +5,7 @@ import com.momi.watermarker.data.storage.VideoStorage
 import com.momi.watermarker.data.video.VideoTransformer
 import com.momi.watermarker.di.IoDispatcher
 import com.momi.watermarker.domain.model.VideoClip
+import com.momi.watermarker.domain.model.VideoEditRequest
 import com.momi.watermarker.domain.repository.VideoRepository
 import com.momi.watermarker.domain.util.Outcome
 import kotlinx.coroutines.CoroutineDispatcher
@@ -26,20 +27,34 @@ class VideoRepositoryImpl @Inject constructor(
             Outcome.catching { videoStorage.probeDurationMs(Uri.parse(clip.uri)) }
         }
 
-    override suspend fun trim(
-        source: VideoClip,
-        startMs: Long,
-        endMs: Long,
-    ): Outcome<VideoClip> = Outcome.catching {
-        // VideoTransformer manages its own (main-thread) execution, so this is
-        // not wrapped in withContext(dispatcher).
-        val outputFile = videoStorage.createOutputFile(prefix = "trim")
-        videoTransformer.trim(Uri.parse(source.uri), outputFile.absolutePath, startMs, endMs)
-        VideoClip(
-            uri = videoStorage.fileProviderUri(outputFile).toString(),
-            durationMs = endMs - startMs,
-        )
-    }
+    override suspend fun export(request: VideoEditRequest): Outcome<VideoClip> =
+        Outcome.catching {
+            // VideoTransformer manages its own (main-thread) execution, so this
+            // is not wrapped in withContext(dispatcher). The one blocking bit —
+            // decoding the overlay bitmap — is cheap and one-shot.
+            val overlay = request.overlayImageUri?.let {
+                videoStorage.decodeBitmap(Uri.parse(it))
+            }
+            val spec = VideoTransformer.ExportSpec(
+                clips = request.segments.map { segment ->
+                    VideoTransformer.Clip(
+                        uri = Uri.parse(segment.uri),
+                        startMs = segment.startMs,
+                        endMs = segment.endMs,
+                        isImage = segment.isImage,
+                        imageDurationMs = segment.imageDurationMs,
+                    )
+                },
+                removeAudio = request.removeAudio,
+                aspectRatio = request.aspectRatio,
+                overlay = overlay,
+                overlayAlpha = request.overlayAlpha,
+                forceAudioTrack = request.forceAudioTrack,
+            )
+            val outputFile = videoStorage.createOutputFile(prefix = "edit")
+            videoTransformer.export(spec, outputFile.absolutePath)
+            VideoClip(uri = videoStorage.fileProviderUri(outputFile).toString())
+        }
 
     override suspend fun saveToGallery(
         clip: VideoClip,

@@ -1,6 +1,7 @@
 package com.momi.watermarker.domain.repository
 
 import com.momi.watermarker.domain.model.VideoClip
+import com.momi.watermarker.domain.model.VideoEditRequest
 import com.momi.watermarker.domain.util.Outcome
 
 /**
@@ -10,8 +11,8 @@ import com.momi.watermarker.domain.util.Outcome
  * APIs), so it lives in the presentation layer; this repository owns metadata
  * probing, transformation (backed by Media3 Transformer), and gallery export.
  *
- * Spike scope (Phase 0): duration probe, trim, and save. Crop/merge/overlay are
- * added in later phases behind this same interface.
+ * All editing operations funnel through [export]: the use-case layer builds a
+ * [VideoEditRequest] describing the operation, and this repository runs it.
  */
 interface VideoRepository {
 
@@ -19,10 +20,10 @@ interface VideoRepository {
     suspend fun getDurationMs(clip: VideoClip): Outcome<Long>
 
     /**
-     * Trims [source] to the window [startMs, endMs] and writes the result to the
-     * app cache, returning a reference (FileProvider URI) to the trimmed clip.
+     * Runs [request] through the Media3 pipeline and writes the result to the
+     * app cache, returning a reference (FileProvider URI) to the exported clip.
      */
-    suspend fun trim(source: VideoClip, startMs: Long, endMs: Long): Outcome<VideoClip>
+    suspend fun export(request: VideoEditRequest): Outcome<VideoClip>
 
     /**
      * Persists [clip] into the shared gallery (MediaStore Movies) under
