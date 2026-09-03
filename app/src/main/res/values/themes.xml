@@ -1,0 +1,8 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base theme applied before Compose takes over; Compose supplies the real
+         Material 3 color scheme at runtime. NoActionBar avoids a duplicate bar. -->
+    <style name="Theme.MomiWaterMarker" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

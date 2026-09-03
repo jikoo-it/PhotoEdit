@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Exposes the cache subdirectory where source captures and watermarked
+         results are written, so they can be shared via FileProvider URIs. -->
+    <cache-path
+        name="shared_images"
+        path="shared_images/" />
+</paths>
