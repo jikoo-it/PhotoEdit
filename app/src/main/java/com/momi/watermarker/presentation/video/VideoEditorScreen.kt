@@ -166,7 +166,7 @@ private fun OperationContent(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         VideoPreview(
-            uri = uiState.previewUri,
+            uri = uiState.primarySource?.uri,
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
@@ -257,6 +257,24 @@ private fun OperationContent(
             } else {
                 Text("${op.title} & save to gallery")
             }
+        }
+
+        // --- Result -----------------------------------------------------------
+        val result = uiState.resultClip
+        if (result != null) {
+            HorizontalDivider()
+            Text(
+                "Result — saved to gallery ✓",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            VideoPreview(
+                uri = result.uri,
+                autoPlay = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(16.dp)),
+            )
         }
     }
 }

@@ -29,6 +29,7 @@ fun VideoPreview(
     uri: String?,
     modifier: Modifier = Modifier,
     placeholder: String = "Choose a video to begin.",
+    autoPlay: Boolean = false,
 ) {
     val context = LocalContext.current
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
@@ -41,6 +42,7 @@ fun VideoPreview(
         if (uri != null) {
             exoPlayer.setMediaItem(MediaItem.fromUri(uri))
             exoPlayer.prepare()
+            exoPlayer.playWhenReady = autoPlay
         } else {
             exoPlayer.clearMediaItems()
         }
