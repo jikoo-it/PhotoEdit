@@ -13,7 +13,6 @@ import com.momi.watermarker.domain.usecase.MergeVideosUseCase
 import com.momi.watermarker.domain.usecase.OverlayImageUseCase
 import com.momi.watermarker.domain.usecase.RemoveAudioUseCase
 import com.momi.watermarker.domain.usecase.SaveVideoUseCase
-import com.momi.watermarker.domain.usecase.TrimVideoUseCase
 import com.momi.watermarker.domain.util.Outcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
@@ -32,7 +31,6 @@ import javax.inject.Inject
 @HiltViewModel
 class VideoEditorViewModel @Inject constructor(
     private val getVideoDuration: GetVideoDurationUseCase,
-    private val trimVideo: TrimVideoUseCase,
     private val cutAndJoin: CutAndJoinVideoUseCase,
     private val mergeVideos: MergeVideosUseCase,
     private val removeAudio: RemoveAudioUseCase,
@@ -69,8 +67,6 @@ class VideoEditorViewModel @Inject constructor(
             it.copy(
                 sources = listOf(clip),
                 durationMs = 0L,
-                trimStartMs = 0L,
-                trimEndMs = 0L,
                 keepRanges = emptyList(),
                 resultClip = null,
             )
@@ -80,8 +76,6 @@ class VideoEditorViewModel @Inject constructor(
                 is Outcome.Success -> _uiState.update {
                     it.copy(
                         durationMs = result.data,
-                        trimStartMs = 0L,
-                        trimEndMs = result.data,
                         keepRanges = listOf(TrimRange(0L, result.data)),
                     )
                 }
@@ -171,14 +165,6 @@ class VideoEditorViewModel @Inject constructor(
 
     // --- Per-op controls ------------------------------------------------------
 
-    fun onTrimRangeChanged(startMs: Long, endMs: Long) {
-        val duration = _uiState.value.durationMs
-        if (duration <= 0L) return
-        val start = startMs.coerceIn(0L, duration)
-        val end = endMs.coerceIn(start, duration)
-        _uiState.update { it.copy(trimStartMs = start, trimEndMs = end).invalidatingResult() }
-    }
-
     fun onAddKeepRange() {
         val duration = _uiState.value.durationMs
         if (duration <= 0L) return
@@ -246,8 +232,6 @@ class VideoEditorViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isExporting = true, resultClip = null, isSaved = false) }
             val edited: Outcome<VideoClip> = when (op) {
-                VideoOp.TRIM ->
-                    trimVideo(source!!, state.trimStartMs, state.trimEndMs)
                 VideoOp.CUT_JOIN ->
                     cutAndJoin(source!!, state.keepRanges)
                 VideoOp.MERGE ->

@@ -12,8 +12,7 @@ the gallery.
 
 | Op | What it does |
 | --- | --- |
-| **Trim** | Keep one section of a video. |
-| **Cut & Join** | Keep several sections of one video and stitch them together in order. |
+| **Trim / Cut & Join** | Keep one section of a video (trim), or several sections stitched together in order. Trim is just the single-segment case. |
 | **Merge** | Concatenate multiple videos into one. Clips with differing audio presence are reconciled via `experimentalSetForceAudioTrack`. |
 | **Remove Sound** | Strip the audio track (`EditedMediaItem.setRemoveAudio`). |
 | **Aspect Ratio** | Reframe to 16:9, 1:1, 9:16, or 4:3 (`Presentation.createForAspectRatio`, scale-to-fit-with-crop). |

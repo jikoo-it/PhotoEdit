@@ -214,15 +214,6 @@ private fun OperationContent(
 
         // --- Per-op controls --------------------------------------------------
         when (op) {
-            VideoOp.TRIM -> if (uiState.isReady) {
-                TrimControls(
-                    startMs = uiState.trimStartMs,
-                    endMs = uiState.trimEndMs,
-                    durationMs = uiState.durationMs,
-                    onRangeChange = viewModel::onTrimRangeChanged,
-                )
-            }
-
             VideoOp.CUT_JOIN -> if (uiState.isReady) {
                 CutJoinControls(uiState = uiState, viewModel = viewModel)
             }
@@ -314,29 +305,6 @@ private fun OperationContent(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun TrimControls(
-    startMs: Long,
-    endMs: Long,
-    durationMs: Long,
-    onRangeChange: (Long, Long) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = "Trim: ${formatMs(startMs)} – ${formatMs(endMs)} " +
-                "(${formatMs(endMs - startMs)} of ${formatMs(durationMs)})",
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        RangeSlider(
-            value = startMs.toFloat()..endMs.toFloat(),
-            onValueChange = { range ->
-                onRangeChange(range.start.toLong(), range.endInclusive.toLong())
-            },
-            valueRange = 0f..durationMs.toFloat(),
-        )
     }
 }
 

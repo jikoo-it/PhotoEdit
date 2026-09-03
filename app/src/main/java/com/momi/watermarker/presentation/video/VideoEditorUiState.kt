@@ -9,8 +9,7 @@ import com.momi.watermarker.domain.model.VideoTransition
  * self-contained flow that funnels into the same export pipeline.
  */
 enum class VideoOp(val title: String, val subtitle: String) {
-    TRIM("Trim", "Keep one section of a video"),
-    CUT_JOIN("Cut & Join", "Keep several sections and stitch them together"),
+    CUT_JOIN("Trim / Cut & Join", "Keep one section, or several stitched together"),
     MERGE("Merge", "Join multiple videos into one"),
     REMOVE_AUDIO("Remove Sound", "Strip the audio track"),
     ASPECT_RATIO("Aspect Ratio", "Reframe to 16:9, 1:1, 9:16…"),
@@ -44,10 +43,7 @@ data class VideoEditorUiState(
     val op: VideoOp? = null,
     val sources: List<VideoClip> = emptyList(),
     val durationMs: Long = 0L,
-    // Trim
-    val trimStartMs: Long = 0L,
-    val trimEndMs: Long = 0L,
-    // Cut & join
+    // Trim / cut & join (one or more kept ranges)
     val keepRanges: List<TrimRange> = emptyList(),
     // Aspect ratio
     val aspectRatio: AspectRatioOption = AspectRatioOption.ORIGINAL,
@@ -76,7 +72,6 @@ data class VideoEditorUiState(
     /** Whether the active operation has everything it needs to export. */
     val canExport: Boolean
         get() = !isExporting && when (op) {
-            VideoOp.TRIM -> isReady && trimEndMs > trimStartMs
             VideoOp.CUT_JOIN -> isReady && keepRanges.isNotEmpty() && keepRanges.all { it.isValid }
             VideoOp.MERGE -> sources.size >= 2
             VideoOp.REMOVE_AUDIO -> hasVideo

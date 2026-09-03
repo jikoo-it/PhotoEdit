@@ -129,8 +129,7 @@ building a different request, **not** a new pipeline. Shipped so far:
 
 | Op | How | Status |
 |---|---|---|
-| Trim | 1 clipped segment | ✅ |
-| Cut & Join | N clipped segments, same source, concatenated | ✅ |
+| Trim / Cut & Join | N clipped segments, same source, concatenated (N=1 is a plain trim — no separate Trim op) | ✅ |
 | Merge | N whole segments, different sources, `experimentalSetForceAudioTrack(true)` | ✅ |
 | Remove Sound | `EditedMediaItem.setRemoveAudio(true)` | ✅ |
 | Aspect Ratio | `Presentation.createForAspectRatio(r, LAYOUT_SCALE_TO_FIT_WITH_CROP)` | ✅ |
@@ -197,3 +196,6 @@ textures; FFmpeg `xfade` remains the last-resort fallback. Tracked, not yet buil
   as composition-wide effects keyed on absolute boundary times computed in `buildTransitionEffects`.
   `VideoTransition` = {NONE, FADE, FLASH, SLIDE, ZOOM}; mapped in `VideoRepositoryImpl`. Compiles
   clean; installed & launches on Pixel 8. True cross-dissolve left as future work.
+- **2026-09-04** — Removed the standalone **Trim** op: it was exactly the single-segment case of
+  **Cut & Join**, so Trim now lives inside "Trim / Cut & Join" (which opens with one kept range).
+  Deleted `TrimVideoUseCase` and the trim-only UI state/controls.
