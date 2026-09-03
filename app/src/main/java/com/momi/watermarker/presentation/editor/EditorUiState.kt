@@ -18,6 +18,8 @@ data class EditorUiState(
     val sourceImages: List<WatermarkImage> = emptyList(),
     /** Index into [sourceImages] currently shown in the preview. */
     val selectedIndex: Int = 0,
+    /** Which editing tool's control panel is currently shown. */
+    val selectedTool: EditorTool = EditorTool.DEFAULT,
     /**
      * True when the current batch was picked from the gallery, so the originals
      * exist there and can be offered for deletion. Camera captures are not in

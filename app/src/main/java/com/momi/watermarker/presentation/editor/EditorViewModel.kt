@@ -151,6 +151,14 @@ class EditorViewModel @Inject constructor(
         regeneratePreview()
     }
 
+    // --- Tool selection ---
+
+    /** Switches the active tool panel. Does not change the pipeline. */
+    fun onToolSelected(tool: EditorTool) {
+        if (tool == _uiState.value.selectedTool) return
+        _uiState.update { it.copy(selectedTool = tool) }
+    }
+
     // --- Watermark configuration events ---
 
     fun onWatermarkTypeSelected(type: WatermarkType) = updateConfig { it.copy(type = type) }

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BrandingWatermark
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -218,16 +220,34 @@ fun EditorScreen(
                 )
 
                 if (uiState.hasImage) {
-                    WatermarkControls(
-                        state = uiState,
-                        viewModel = viewModel,
-                        onSave = ::startSave,
-                        onPickWatermarkImage = {
-                            watermarkImageLauncher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        },
+                    ToolSwitcher(
+                        selected = uiState.selectedTool,
+                        onSelect = viewModel::onToolSelected,
                     )
+
+                    when (uiState.selectedTool) {
+                        EditorTool.WATERMARK -> WatermarkControls(
+                            state = uiState,
+                            viewModel = viewModel,
+                            onPickWatermarkImage = {
+                                watermarkImageLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                        )
+                    }
+
+                    Button(
+                        onClick = ::startSave,
+                        enabled = uiState.canSave,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Filled.Save, contentDescription = null)
+                        Text(
+                            if (uiState.hasMultipleImages) "  Save ${uiState.imageCount} images"
+                            else "  Save to gallery"
+                        )
+                    }
                 }
             }
         }
@@ -379,7 +399,6 @@ private fun SourceButtons(onPickGallery: () -> Unit, onTakePhoto: () -> Unit) {
 private fun WatermarkControls(
     state: EditorUiState,
     viewModel: EditorViewModel,
-    onSave: () -> Unit,
     onPickWatermarkImage: () -> Unit,
 ) {
     val config = state.config
@@ -495,17 +514,51 @@ private fun WatermarkControls(
             value = config.opacity,
             onValueChange = viewModel::onOpacityChanged,
         )
+    }
+}
 
-        Button(
-            onClick = onSave,
-            enabled = state.canSave,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Filled.Save, contentDescription = null)
-            Text(if (state.hasMultipleImages) "  Save ${state.imageCount} images" else "  Save to gallery")
+/** A horizontally-scrolling row of editing tools; the selected one is highlighted. */
+@Composable
+private fun ToolSwitcher(
+    selected: EditorTool,
+    onSelect: (EditorTool) -> Unit,
+) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(EditorTool.entries, key = { it.name }) { tool ->
+            val isSelected = tool == selected
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                    .clickable { onSelect(tool) }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+            ) {
+                Icon(
+                    imageVector = tool.icon,
+                    contentDescription = null,
+                    tint = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = tool.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
+
+/** Material icon shown for each tool in the switcher. */
+private val EditorTool.icon
+    get() = when (this) {
+        EditorTool.WATERMARK -> Icons.Filled.BrandingWatermark
+    }
 
 @Composable
 private fun SaveOptionsDialog(
