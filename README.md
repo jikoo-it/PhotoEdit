@@ -1,59 +1,83 @@
 # MomiWaterMarker
 
-An Android media studio with two independent flows, chosen from a launch screen:
-**Image Processing** (watermarking + photo edits) and **Video Processing** (a
-Media3-powered video-editing suite). Both preview the result before saving to
-the gallery.
+An Android image (and video) processing app. Pick one or many photos from the
+**gallery** or **camera**, apply a stack of edits — crop, transform, resize,
+filters, adjustments, pixelate, frame, and watermark — preview the result live,
+and save it back to your gallery. The same edits can be applied identically to
+a whole **batch** of images in one pass.
 
-## Image features
+There are two flows, chosen from a launch screen: **Image Processing** (below)
+and **Video Processing** — documented separately in
+**[README.video.md](README.video.md)**.
+
+## Image processing
+
+Every edit is a composable **`ImageOp`**. The tools below each contribute one op
+(or, for Export, the encode settings) to a **pipeline** that is applied in a
+fixed, sensible order to every image in the batch.
+
+| Tool | What it does |
+| --- | --- |
+| **Crop** | Drag-to-crop with a live overlay. Shapes: rectangle, circle, rounded, squircle. Non-rectangular shapes mask to **transparent** pixels outside the shape. |
+| **Transform** | Rotate by 90° increments and flip horizontally / vertically. |
+| **Resize** | Scale by a percentage, or downscale so the longest side fits a max pixel count (aspect preserved). |
+| **Filters** | Preset color filters (Mono, Sepia, Noir, Vivid, Cool, Warm, Vintage) **plus a custom RGB color tint** — pick any color (R/G/B 0–255) to wash the image. |
+| **Adjust** | Fine-grained brightness, contrast, saturation, and warmth, combined into a single `ColorMatrix`. |
+| **Pixelate** | Mosaic effect — averages each *N×N* block into one color. |
+| **Frame** | Decorative frames: Solid border, Inset mat, Rounded corners (transparent outside), or a soft drop Shadow. |
+| **Watermark** | Text watermark with pattern (Center, four corners, Tiled, Diagonal), editable text, color, font, opacity, and size. |
+| **Export** | Encode as JPEG / PNG / WebP. Choose a fixed **quality**, or a **target file size** and let the app search for the best quality that fits. |
+
+### How the pipeline composes
+
+Ops are always applied in this order, so results are predictable regardless of
+the order tools were touched:
+
+```
+Crop → Transform → Resize → Filter → Adjust → Pixelate → Watermark → Frame
+```
+
+The frame is applied last so it wraps the finished (watermarked) photo.
+**Compression is not a pipeline op** — it changes how the final pixels are
+*encoded*, not the pixels themselves, so it is applied once at the write stage.
+
+- **Live preview** rendered by the same engine that writes the final file, with
+  a debounced re-render as you adjust controls.
+- **Batch model** — one edit stack applied identically to all selected images.
+  Single-image-only tools (Crop) are hidden while multiple images are selected.
+- **Swipeable preview** — the large preview is a pager; swipe between images, or
+  tap to view full-screen (also swipeable). A trailing "+" page adds more images.
+- **Accurate size badge** — shows the real on-disk size when unedited, otherwise
+  the estimated size of the file that will be written with the current export
+  settings.
+- **Alpha-safe export** — when the result has transparency (a shaped crop or
+  rounded frame), a lossy JPEG target is automatically bumped to PNG so the
+  transparency survives.
+- **Undo / redo** across the whole edit history.
+- **Edge-to-edge UI** that respects the status bar and navigation / gesture
+  insets on every screen.
+
+## Sourcing & saving
 
 - Source images from the system **Photo Picker** (no storage permission) or the
-  **Camera** (via `FileProvider`, no camera permission required).
-- Predefined watermark **patterns**: Center, four corners, Tiled, and Diagonal.
-- Editable watermark **text**, **color** (preset palette), and **font**.
-- Adjustable **opacity** and **text size** (resolution-independent).
-- Live, pixel-accurate preview rendered by the real engine.
-- One-tap **save to gallery** (MediaStore → `Pictures/MomiWaterMarker`).
+  **Camera** (via `FileProvider`, no camera permission required); pick one or
+  many at once.
+- One-tap **save to gallery** (MediaStore → `Pictures/MomiWaterMarker`), with an
+  optional prompt to delete the gallery originals afterward.
 
-## Video features
+## Video processing
 
-Every operation is a distinct flow that funnels into one export pipeline
-(`VideoEditRequest` → Media3 `Composition`). Pick a source, configure the op,
-**preview the result**, then save.
-
-- **Trim** — keep one section of a video.
-- **Cut & Join** — keep several sections of one video and stitch them in order.
-- **Merge** — concatenate multiple videos into one (audio tracks reconciled via
-  `experimentalSetForceAudioTrack`).
-- **Remove Sound** — strip the audio track.
-- **Aspect Ratio** — reframe to 16:9, 1:1, 9:16, or 4:3.
-- **Image Overlay** — stamp a logo/image over the video with adjustable opacity.
-- **Images → Video (slideshow)** — turn photos into a video: set **each image's
-  on-screen duration** and pick the **transition at every boundary
-  independently** (each can differ), with a shared transition length and output
-  aspect ratio.
-
-### Transitions
-
-Media3 1.5.1 has **no native clip-to-clip transition API**, so transitions are
-rendered as composition-wide, time-varying effects keyed to each boundary's
-absolute timestamp — no clip overlap needed:
-
-- **Fade** / **Flash** — dip through black / white (`FadeTransitionsMatrix`, an
-  `RgbMatrix`).
-- **Slide** / **Zoom** — translate or scale the frame (`GeometricTransitionsMatrix`,
-  a `MatrixTransformation`).
-
-Because there's no overlap, slide/zoom reveal the background (motion *through*
-black) rather than a true cross-dissolve — which, along with the full research
-log, is tracked in [`docs/video-editing.md`](docs/video-editing.md).
+A separate **Video Processing** flow offers **trim**, **cut & join**, **merge**,
+**remove audio**, **aspect-ratio change**, **image overlay**, and an
+**images-to-video slideshow with transitions** — each ending in the same
+preview → save-to-gallery step. See **[README.video.md](README.video.md)** for
+the full feature set, the transition implementation, and video architecture.
 
 ## Roadmap / TODO
 
 Candidate advanced image-processing features. Each would land as a new
 `ImageOp` (or export option) with its own data-layer processor, slotting into
-the existing pipeline — so they compose with crop, filters, adjustments, and
-watermark.
+the existing pipeline — so they compose with the tools above.
 
 - [ ] **Edge detection** (Sobel / Canny) — outline extraction.
 - [ ] **Cartoonify** — edge-preserving smoothing + quantized colors + edge overlay.
@@ -75,52 +99,50 @@ Clean Architecture + MVVM, with the dependency rule pointing inward
 
 ```
 presentation/            UI (Jetpack Compose) + MVVM
-  AppRootScreen.kt       Launch chooser: Image vs Video flow (AppSection)
-  editor/
-    EditorScreen.kt      Composables; Activity Result APIs for gallery/camera
+  AppRootScreen.kt       Chooser between the image and video flows
+  editor/                Image editor
+    EditorScreen.kt      Composables; preview pager; Activity Result APIs
     EditorViewModel.kt   StateFlow<EditorUiState> + one-shot effects channel
-    EditorUiState.kt     Immutable UI state + EditorEffect
-  video/
-    VideoEditorScreen.kt   Op picker + per-op flows + preview-before-save
-    VideoEditorViewModel.kt StateFlow<VideoEditorUiState> + effects channel
-    VideoEditorUiState.kt  VideoOp, AspectRatioOption, SlideItem, UI state
-    VideoComponents.kt     ExoPlayer preview (AndroidView)
+    EditorUiState.kt     Immutable UI state (assembles the Pipeline) + EditorEffect
+    EditorTool.kt        The set of editing tools
+    components/          ImageCropper, EditorControls (per-tool panels)
+  video/                 Video editor screen + view model
   theme/                 Material 3 theme
 
 domain/                  Pure Kotlin — no Android types
-  model/                 Watermark* + VideoClip, VideoSegment, VideoEditRequest,
-                         TrimRange, VideoTransition
-  repository/            WatermarkRepository, MediaRepository, VideoRepository
-  usecase/               Image: ApplyWatermark, SaveWatermarkedImage, …
-                         Video: Trim, CutAndJoin, MergeVideos, RemoveAudio,
-                         ChangeAspectRatio, OverlayImage, CreateSlideshow,
-                         GetVideoDuration, SaveVideo
+  model/                 ImageOp (sealed) + Pipeline, CropShape, PhotoFilter,
+                         FrameStyle, ResizeMode, ExportOptions/Format, Watermark*
+  repository/            Image / Media / Video repositories (abstractions)
+  usecase/               ApplyPipeline, CropImage, EstimateExportSize,
+                         ProcessAndSaveImages, GetImageInfo, video use cases, …
   util/                  Outcome<T> result type
 
 data/                    Framework implementations
-  rendering/             WatermarkRenderer (Canvas engine), TypefaceProvider
-  video/                 VideoTransformer (Media3 export engine) +
-                         FadeTransitionsMatrix, GeometricTransitionsMatrix (effects)
-  storage/               ImageStorage, VideoStorage (decode, MediaStore, FileProvider)
-  repository/            WatermarkRepositoryImpl, MediaRepositoryImpl, VideoRepositoryImpl
-
-di/                      Hilt modules (incl. VideoModule) + @IoDispatcher qualifier
+  rendering/             Per-op processors (Geometry, Color, Effect, Frame,
+                         Watermark) + PipelineRenderer that folds the ops,
+                         ShapeMask, TypefaceProvider
+  storage/               ImageStorage (decode/EXIF, cache, MediaStore, FileProvider)
+  repository/            Repository implementations
 ```
 
-The video suite is deliberately **independent** of image processing: it adds
-only new files (plus its own `di/VideoModule`) and never touches the
-image-processing code.
+Video-specific packages (`presentation/video`, `data/video`, video use cases,
+`di/VideoModule`) are documented in [README.video.md](README.video.md).
+
+```
+di/                      Hilt modules + @IoDispatcher qualifier
+```
 
 ### SOLID highlights
 
-- **SRP** — the renderer only draws; storage only does I/O; the ViewModel only
-  holds UI state and orchestrates use cases.
-- **OCP** — new watermark patterns/fonts are added as enum cases handled in one
-  `when`; new option sources plug in behind `GetWatermarkOptionsUseCase`.
-- **DIP** — use cases depend on `WatermarkRepository` / `MediaRepository`
-  interfaces (in `domain`), bound to implementations in `di/RepositoryModule`.
-- **ISP** — image *acquisition/persistence* and *watermarking* are separate,
-  focused repository interfaces.
+- **SRP** — each processor does one transformation; storage only does I/O; the
+  ViewModel only holds UI state and orchestrates use cases.
+- **OCP** — a new edit is a new `ImageOp` case plus its processor; the sealed
+  hierarchy makes the renderer and UI fail to compile until it is handled
+  everywhere. New filters/patterns/fonts are added as enum cases in one `when`.
+- **DIP** — use cases depend on repository *interfaces* (in `domain`), bound to
+  implementations in `di`.
+- **ISP** — image acquisition/persistence, watermarking, and video editing are
+  separate, focused repository interfaces.
 
 ## Build & test
 
