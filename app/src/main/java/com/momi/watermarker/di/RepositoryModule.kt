@@ -1,9 +1,9 @@
 package com.momi.watermarker.di
 
+import com.momi.watermarker.data.repository.ImageProcessingRepositoryImpl
 import com.momi.watermarker.data.repository.MediaRepositoryImpl
-import com.momi.watermarker.data.repository.WatermarkRepositoryImpl
+import com.momi.watermarker.domain.repository.ImageProcessingRepository
 import com.momi.watermarker.domain.repository.MediaRepository
-import com.momi.watermarker.domain.repository.WatermarkRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -21,7 +21,9 @@ abstract class RepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindWatermarkRepository(impl: WatermarkRepositoryImpl): WatermarkRepository
+    abstract fun bindImageProcessingRepository(
+        impl: ImageProcessingRepositoryImpl,
+    ): ImageProcessingRepository
 
     @Binds
     @Singleton

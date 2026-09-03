@@ -16,6 +16,7 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.momi.watermarker.domain.model.CropShape
+import com.momi.watermarker.domain.model.ExportFormat
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.squircleUnitPoints
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -71,6 +72,29 @@ class ImageStorage @Inject constructor(
             bitmap.compress(format, quality, out)
         }
         return fileProviderUri(file)
+    }
+
+    /**
+     * Compresses [bitmap] into the shared cache using [format] at [quality]
+     * (0..100; ignored for formats without a quality setting) and returns a
+     * `content://` URI. The file carries [format]'s extension so downstream
+     * consumers (and the gallery export) get the right type.
+     */
+    fun writeToCache(bitmap: Bitmap, prefix: String, format: ExportFormat, quality: Int): Uri {
+        val dir = File(context.cacheDir, SHARED_DIR).apply { mkdirs() }
+        val file = File(dir, "${prefix}_${System.currentTimeMillis()}.${format.extension}")
+        val effectiveQuality = if (format.supportsQuality) quality else 100
+        FileOutputStream(file).use { out ->
+            bitmap.compress(format.toCompressFormat(), effectiveQuality, out)
+        }
+        return fileProviderUri(file)
+    }
+
+    private fun ExportFormat.toCompressFormat(): Bitmap.CompressFormat = when (this) {
+        ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
+        ExportFormat.PNG -> Bitmap.CompressFormat.PNG
+        // Lossy WebP honours the quality setting; available since API 30 (minSdk 31).
+        ExportFormat.WEBP -> Bitmap.CompressFormat.WEBP_LOSSY
     }
 
     /**
@@ -150,13 +174,14 @@ class ImageStorage @Inject constructor(
 
     /**
      * Copies the image at [sourceUri] into the device gallery (Pictures/MomiWaterMarker)
-     * and returns the new MediaStore content URI.
+     * as [format] and returns the new MediaStore content URI. [sourceUri] is
+     * expected to already be encoded in [format] (see [writeToCache]).
      */
-    fun saveToGallery(sourceUri: Uri, displayName: String): Uri {
+    fun saveToGallery(sourceUri: Uri, displayName: String, format: ExportFormat): Uri {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
-            put(MediaStore.Images.Media.DISPLAY_NAME, "$displayName.jpg")
-            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.DISPLAY_NAME, "$displayName.${format.extension}")
+            put(MediaStore.Images.Media.MIME_TYPE, format.mimeType)
             put(
                 MediaStore.Images.Media.RELATIVE_PATH,
                 "${Environment.DIRECTORY_PICTURES}/MomiWaterMarker",

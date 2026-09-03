@@ -7,12 +7,12 @@ import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.model.WatermarkPattern
 import com.momi.watermarker.domain.model.WatermarkType
-import com.momi.watermarker.domain.usecase.ApplyWatermarkUseCase
+import com.momi.watermarker.domain.usecase.ApplyPipelineUseCase
 import com.momi.watermarker.domain.usecase.BatchSaveResult
 import com.momi.watermarker.domain.usecase.CreateCaptureDestinationUseCase
 import com.momi.watermarker.domain.usecase.CropImageUseCase
 import com.momi.watermarker.domain.usecase.GetWatermarkOptionsUseCase
-import com.momi.watermarker.domain.usecase.SaveWatermarkedImagesUseCase
+import com.momi.watermarker.domain.usecase.ProcessAndSaveImagesUseCase
 import com.momi.watermarker.domain.util.Outcome
 import com.momi.watermarker.presentation.editor.EditorEffect
 import com.momi.watermarker.presentation.editor.EditorViewModel
@@ -34,15 +34,15 @@ class EditorViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    private val applyWatermark = mockk<ApplyWatermarkUseCase>()
-    private val saveWatermarkedImages = mockk<SaveWatermarkedImagesUseCase>()
+    private val applyPipeline = mockk<ApplyPipelineUseCase>()
+    private val processAndSaveImages = mockk<ProcessAndSaveImagesUseCase>()
     private val createCaptureDestination = mockk<CreateCaptureDestinationUseCase>()
     private val cropImage = mockk<CropImageUseCase>()
     private val getOptions = GetWatermarkOptionsUseCase()
 
     private fun viewModel() = EditorViewModel(
-        applyWatermark = applyWatermark,
-        saveWatermarkedImages = saveWatermarkedImages,
+        applyPipeline = applyPipeline,
+        processAndSaveImages = processAndSaveImages,
         createCaptureDestination = createCaptureDestination,
         cropImage = cropImage,
         getOptions = getOptions,
@@ -59,7 +59,7 @@ class EditorViewModelTest {
     @Test
     fun `selecting images renders a preview of the first after debounce`() = runTest {
         val output = WatermarkImage("content://watermarked")
-        coEvery { applyWatermark(any(), any()) } returns Outcome.Success(output)
+        coEvery { applyPipeline(any(), any()) } returns Outcome.Success(output)
 
         val vm = viewModel()
         vm.onImagesSelected(listOf("content://a", "content://b"))
@@ -70,12 +70,12 @@ class EditorViewModelTest {
         assertEquals("content://a", state.selectedSource?.uri)
         assertTrue(state.sourceFromGallery)
         assertEquals(output, state.previewImage)
-        coVerify { applyWatermark(any(), any()) }
+        coVerify { applyPipeline(any(), any()) }
     }
 
     @Test
     fun `selecting more images appends to the batch without duplicates`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
 
         val vm = viewModel()
@@ -99,7 +99,7 @@ class EditorViewModelTest {
 
     @Test
     fun `removing a non-selected image keeps the selection`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
 
         val vm = viewModel()
@@ -118,7 +118,7 @@ class EditorViewModelTest {
 
     @Test
     fun `removing the last image clears the batch`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
 
         val vm = viewModel()
@@ -136,9 +136,9 @@ class EditorViewModelTest {
 
     @Test
     fun `focusing another image re-renders the preview for it`() = runTest {
-        coEvery { applyWatermark(WatermarkImage("content://a"), any()) } returns
+        coEvery { applyPipeline(WatermarkImage("content://a"), any()) } returns
             Outcome.Success(WatermarkImage("content://wm-a"))
-        coEvery { applyWatermark(WatermarkImage("content://b"), any()) } returns
+        coEvery { applyPipeline(WatermarkImage("content://b"), any()) } returns
             Outcome.Success(WatermarkImage("content://wm-b"))
 
         val vm = viewModel()
@@ -170,7 +170,7 @@ class EditorViewModelTest {
 
     @Test
     fun `captured photos are not eligible for original deletion`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
 
         val vm = viewModel()
@@ -190,14 +190,14 @@ class EditorViewModelTest {
             advanceUntilIdle()
             assertTrue(awaitItem() is EditorEffect.ShowMessage)
         }
-        coVerify(exactly = 0) { saveWatermarkedImages(any(), any()) }
+        coVerify(exactly = 0) { processAndSaveImages(any(), any(), any()) }
     }
 
     @Test
     fun `save renders and persists the whole batch`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
-        coEvery { saveWatermarkedImages(any(), any()) } returns
+        coEvery { processAndSaveImages(any(), any(), any()) } returns
             BatchSaveResult(savedCount = 2, requested = 2, errors = emptyList())
 
         val vm = viewModel()
@@ -209,18 +209,41 @@ class EditorViewModelTest {
 
         assertFalse(vm.uiState.value.isSaving)
         coVerify(exactly = 1) {
-            saveWatermarkedImages(
+            processAndSaveImages(
                 listOf(WatermarkImage("content://a"), WatermarkImage("content://b")),
+                any(),
                 any(),
             )
         }
     }
 
     @Test
-    fun `save with delete requested asks the screen to remove originals`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+    fun `save with no edits still re-encodes the batch`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
-        coEvery { saveWatermarkedImages(any(), any()) } returns
+        coEvery { processAndSaveImages(any(), any(), any()) } returns
+            BatchSaveResult(savedCount = 1, requested = 1, errors = emptyList())
+
+        val vm = viewModel()
+        vm.onImagesSelected(listOf("content://a"))
+        advanceUntilIdle()
+        // Clear the default watermark text so the pipeline is empty.
+        vm.onTextChanged("")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.pipeline.isEmpty)
+        assertTrue(vm.uiState.value.canSave)
+
+        vm.onSaveRequested()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { processAndSaveImages(any(), any(), any()) }
+    }
+
+    @Test
+    fun `save with delete requested asks the screen to remove originals`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
+            Outcome.Success(WatermarkImage("content://wm"))
+        coEvery { processAndSaveImages(any(), any(), any()) } returns
             BatchSaveResult(savedCount = 2, requested = 2, errors = emptyList())
 
         val vm = viewModel()
@@ -241,9 +264,9 @@ class EditorViewModelTest {
 
     @Test
     fun `partial save failure skips original deletion`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
-        coEvery { saveWatermarkedImages(any(), any()) } returns
+        coEvery { processAndSaveImages(any(), any(), any()) } returns
             BatchSaveResult(savedCount = 1, requested = 2, errors = listOf(RuntimeException("boom")))
 
         val vm = viewModel()
@@ -260,7 +283,7 @@ class EditorViewModelTest {
 
     @Test
     fun `confirming deletion clears the batch`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
 
         val vm = viewModel()
@@ -274,8 +297,81 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun `undo reverts the last edit and redo re-applies it`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
+            Outcome.Success(WatermarkImage("content://wm"))
+
+        val vm = viewModel()
+        vm.onImagesSelected(listOf("content://a"))
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.canUndo)
+
+        vm.onBrightnessChanged(0.5f)
+        advanceUntilIdle()
+        assertEquals(0.5f, vm.uiState.value.adjust.brightness)
+        assertTrue(vm.uiState.value.canUndo)
+
+        vm.onUndo()
+        advanceUntilIdle()
+        assertEquals(0f, vm.uiState.value.adjust.brightness)
+        assertTrue(vm.uiState.value.canRedo)
+
+        vm.onRedo()
+        advanceUntilIdle()
+        assertEquals(0.5f, vm.uiState.value.adjust.brightness)
+    }
+
+    @Test
+    fun `a continuous slider drag collapses into a single undo step`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
+            Outcome.Success(WatermarkImage("content://wm"))
+
+        val vm = viewModel()
+        vm.onImagesSelected(listOf("content://a"))
+        advanceUntilIdle()
+
+        // Simulate a drag: many contrast changes in a row.
+        vm.onContrastChanged(0.2f)
+        vm.onContrastChanged(0.4f)
+        vm.onContrastChanged(0.6f)
+        advanceUntilIdle()
+
+        // A single undo returns all the way to the pre-drag value.
+        vm.onUndo()
+        advanceUntilIdle()
+        assertEquals(0f, vm.uiState.value.adjust.contrast)
+        assertFalse(vm.uiState.value.canUndo)
+    }
+
+    @Test
+    fun `reset all clears every edit and is itself undoable`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
+            Outcome.Success(WatermarkImage("content://wm"))
+
+        val vm = viewModel()
+        vm.onImagesSelected(listOf("content://a"))
+        advanceUntilIdle()
+
+        vm.onSaturationChanged(-0.5f)
+        vm.onRotateClockwise()
+        advanceUntilIdle()
+
+        vm.onResetAllEdits()
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.adjust.isIdentity)
+        assertTrue(vm.uiState.value.transform.isIdentity)
+
+        // Undo the reset brings the edits back.
+        vm.onUndo()
+        advanceUntilIdle()
+        assertEquals(-0.5f, vm.uiState.value.adjust.saturation)
+        assertEquals(90, vm.uiState.value.transform.rotationDegrees)
+    }
+
+    @Test
     fun `cropping a watermark image switches to image mode`() = runTest {
-        coEvery { applyWatermark(any(), any()) } returns
+        coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
         coEvery { cropImage(any(), any(), any()) } returns
             Outcome.Success(WatermarkImage("content://cropped"))

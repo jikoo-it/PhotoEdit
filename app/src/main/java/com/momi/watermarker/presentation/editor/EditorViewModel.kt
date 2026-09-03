@@ -3,18 +3,22 @@ package com.momi.watermarker.presentation.editor
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.momi.watermarker.domain.model.CropShape
+import com.momi.watermarker.domain.model.ExportFormat
+import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.NormalizedRect
+import com.momi.watermarker.domain.model.PhotoFilter
+import com.momi.watermarker.domain.model.ResizeMode
 import com.momi.watermarker.domain.model.WatermarkConfig
 import com.momi.watermarker.domain.model.WatermarkFont
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.model.WatermarkPattern
 import com.momi.watermarker.domain.model.WatermarkType
-import com.momi.watermarker.domain.usecase.ApplyWatermarkUseCase
+import com.momi.watermarker.domain.usecase.ApplyPipelineUseCase
 import com.momi.watermarker.domain.usecase.BatchSaveResult
 import com.momi.watermarker.domain.usecase.CreateCaptureDestinationUseCase
 import com.momi.watermarker.domain.usecase.CropImageUseCase
 import com.momi.watermarker.domain.usecase.GetWatermarkOptionsUseCase
-import com.momi.watermarker.domain.usecase.SaveWatermarkedImagesUseCase
+import com.momi.watermarker.domain.usecase.ProcessAndSaveImagesUseCase
 import com.momi.watermarker.domain.util.Outcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -35,8 +39,8 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class EditorViewModel @Inject constructor(
-    private val applyWatermark: ApplyWatermarkUseCase,
-    private val saveWatermarkedImages: SaveWatermarkedImagesUseCase,
+    private val applyPipeline: ApplyPipelineUseCase,
+    private val processAndSaveImages: ProcessAndSaveImagesUseCase,
     private val createCaptureDestination: CreateCaptureDestinationUseCase,
     private val cropImage: CropImageUseCase,
     getOptions: GetWatermarkOptionsUseCase,
@@ -55,6 +59,16 @@ class EditorViewModel @Inject constructor(
 
     /** Tracks the in-flight preview render so rapid edits cancel stale work. */
     private var previewJob: Job? = null
+
+    /** Undo/redo history of edit snapshots (most recent at the end). */
+    private val undoStack = ArrayDeque<EditSnapshot>()
+    private val redoStack = ArrayDeque<EditSnapshot>()
+
+    /**
+     * The tag of the last recorded edit, used to coalesce a continuous run of
+     * edits (e.g. one slider drag) into a single undo step. Reset on undo/redo.
+     */
+    private var lastHistoryTag: String? = null
 
     // --- Image source events ---
 
@@ -151,34 +165,108 @@ class EditorViewModel @Inject constructor(
         regeneratePreview()
     }
 
+    // --- Tool selection ---
+
+    /** Switches the active tool panel. Does not change the pipeline. */
+    fun onToolSelected(tool: EditorTool) {
+        if (tool == _uiState.value.selectedTool) return
+        _uiState.update { it.copy(selectedTool = tool) }
+    }
+
+    // --- Crop events ---
+
+    /** Stores a rectangular crop (fractions of the source) chosen in the cropper. */
+    fun onCropChanged(rect: NormalizedRect) =
+        updateAndPreview(tag = null) { it.copy(crop = ImageOp.Crop(rect)) }
+
+    /** Clears the crop (back to the full image). */
+    fun onResetCrop() = updateAndPreview(tag = null) { it.copy(crop = ImageOp.Crop()) }
+
+    // --- Transform events ---
+
+    /** Rotates the image 90° clockwise. */
+    fun onRotateClockwise() = updateTransform { it.rotatedClockwise() }
+
+    fun onFlipHorizontal() = updateTransform { it.copy(flipHorizontal = !it.flipHorizontal) }
+
+    fun onFlipVertical() = updateTransform { it.copy(flipVertical = !it.flipVertical) }
+
+    /** Clears all rotate/flip settings. */
+    fun onResetTransform() = updateTransform { ImageOp.Transform() }
+
+    // --- Resize events ---
+
+    fun onResizeModeSelected(mode: ResizeMode) = updateResize(tag = null) { it.copy(mode = mode) }
+
+    fun onResizePercentChanged(percent: Float) =
+        updateResize("resize.percent") { it.copy(percent = percent.coerceIn(0.01f, 1f)) }
+
+    fun onResizeMaxDimensionChanged(maxDimensionPx: Int) =
+        updateResize(tag = null) { it.copy(maxDimensionPx = maxDimensionPx.coerceAtLeast(1)) }
+
+    /** Clears any downscaling (back to full size). */
+    fun onResetResize() = updateResize(tag = null) { ImageOp.Resize() }
+
+    // --- Filter events ---
+
+    fun onFilterSelected(filter: PhotoFilter) =
+        updateAndPreview(tag = null) { it.copy(filter = ImageOp.Filter(filter)) }
+
+    // --- Adjustment events ---
+
+    fun onBrightnessChanged(value: Float) =
+        updateAdjust("adjust.brightness") { it.copy(brightness = value.coerceIn(-1f, 1f)) }
+
+    fun onContrastChanged(value: Float) =
+        updateAdjust("adjust.contrast") { it.copy(contrast = value.coerceIn(-1f, 1f)) }
+
+    fun onSaturationChanged(value: Float) =
+        updateAdjust("adjust.saturation") { it.copy(saturation = value.coerceIn(-1f, 1f)) }
+
+    fun onWarmthChanged(value: Float) =
+        updateAdjust("adjust.warmth") { it.copy(warmth = value.coerceIn(-1f, 1f)) }
+
+    /** Clears all fine-grained adjustments. */
+    fun onResetAdjust() = updateAdjust(tag = null) { ImageOp.Adjust() }
+
+    // --- Export events ---
+
+    fun onExportFormatSelected(format: ExportFormat) =
+        mutate(tag = null, preview = false) { it.copy(exportOptions = it.exportOptions.copy(format = format)) }
+
+    fun onExportQualityChanged(quality: Int) =
+        mutate("export.quality", preview = false) {
+            it.copy(exportOptions = it.exportOptions.copy(quality = quality.coerceIn(0, 100)))
+        }
+
     // --- Watermark configuration events ---
 
-    fun onWatermarkTypeSelected(type: WatermarkType) = updateConfig { it.copy(type = type) }
+    fun onWatermarkTypeSelected(type: WatermarkType) = updateConfig(tag = null) { it.copy(type = type) }
 
-    fun onTextChanged(text: String) = updateConfig { it.copy(text = text) }
+    fun onTextChanged(text: String) = updateConfig("wm.text") { it.copy(text = text) }
 
-    fun onPatternSelected(pattern: WatermarkPattern) = updateConfig { it.copy(pattern = pattern) }
+    fun onPatternSelected(pattern: WatermarkPattern) = updateConfig(tag = null) { it.copy(pattern = pattern) }
 
-    fun onFontSelected(font: WatermarkFont) = updateConfig { it.copy(font = font) }
+    fun onFontSelected(font: WatermarkFont) = updateConfig(tag = null) { it.copy(font = font) }
 
-    fun onColorSelected(colorArgb: Int) = updateConfig { it.copy(colorArgb = colorArgb) }
+    fun onColorSelected(colorArgb: Int) = updateConfig(tag = null) { it.copy(colorArgb = colorArgb) }
 
     fun onOpacityChanged(opacity: Float) =
-        updateConfig { it.copy(opacity = opacity.coerceIn(0f, 1f)) }
+        updateConfig("wm.opacity") { it.copy(opacity = opacity.coerceIn(0f, 1f)) }
 
     fun onTextSizeChanged(ratio: Float) =
-        updateConfig { it.copy(textSizeRatio = ratio.coerceIn(0.02f, 0.2f)) }
+        updateConfig("wm.textSize") { it.copy(textSizeRatio = ratio.coerceIn(0.02f, 0.2f)) }
 
     fun onImageSizeChanged(ratio: Float) =
-        updateConfig { it.copy(imageSizeRatio = ratio.coerceIn(MIN_IMAGE_RATIO, MAX_IMAGE_RATIO)) }
+        updateConfig("wm.imageSize") { it.copy(imageSizeRatio = ratio.coerceIn(MIN_IMAGE_RATIO, MAX_IMAGE_RATIO)) }
 
-    fun onRotationChanged(degrees: Float) = updateConfig { it.copy(rotationDegrees = degrees) }
+    fun onRotationChanged(degrees: Float) = updateConfig("wm.rotation") { it.copy(rotationDegrees = degrees) }
 
     fun onTileSpacingChanged(ratio: Float) =
-        updateConfig { it.copy(tileSpacingRatio = ratio.coerceIn(0f, MAX_SPACING_RATIO)) }
+        updateConfig("wm.tileSpacing") { it.copy(tileSpacingRatio = ratio.coerceIn(0f, MAX_SPACING_RATIO)) }
 
     fun onLineSpacingChanged(ratio: Float) =
-        updateConfig { it.copy(lineSpacingRatio = ratio.coerceIn(0f, MAX_SPACING_RATIO)) }
+        updateConfig("wm.lineSpacing") { it.copy(lineSpacingRatio = ratio.coerceIn(0f, MAX_SPACING_RATIO)) }
 
     /**
      * Called after the user picks a watermark image and confirms a crop [rect]
@@ -189,7 +277,7 @@ class EditorViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = cropImage(WatermarkImage(sourceUri), rect, shape)) {
                 is Outcome.Success ->
-                    updateConfig { it.copy(type = WatermarkType.IMAGE, imageUri = result.data.uri) }
+                    updateConfig(tag = null) { it.copy(type = WatermarkType.IMAGE, imageUri = result.data.uri) }
                 is Outcome.Failure ->
                     emitMessage("Couldn't crop image: ${result.error.message}")
             }
@@ -210,16 +298,15 @@ class EditorViewModel @Inject constructor(
             emitMessage("Nothing to save yet.")
             return
         }
-        if (!state.config.isRenderable) {
-            emitMessage("Add watermark text or choose a watermark image first.")
-            return
-        }
-        val config = state.config
+        // An empty pipeline is fine — the images are re-encoded per the export
+        // options (batch compression / format conversion with no other edits).
+        val pipeline = state.pipeline
+        val export = state.exportOptions
         val originals = if (deleteOriginals && state.canDeleteOriginals) sources.map { it.uri } else emptyList()
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
-            val result = saveWatermarkedImages(sources, config)
+            val result = processAndSaveImages(sources, pipeline, export)
             _uiState.update { it.copy(isSaving = false) }
 
             when {
@@ -258,8 +345,81 @@ class EditorViewModel @Inject constructor(
         else -> "Saved ${result.savedCount} of ${result.requested}; ${result.errors.size} failed"
     }
 
-    private fun updateConfig(transform: (WatermarkConfig) -> WatermarkConfig) {
-        _uiState.update { it.copy(config = transform(it.config)) }
+    private fun updateConfig(tag: String?, transform: (WatermarkConfig) -> WatermarkConfig) =
+        mutate(tag) { it.copy(config = transform(it.config)) }
+
+    private fun updateTransform(reduce: (ImageOp.Transform) -> ImageOp.Transform) =
+        mutate(tag = null) { it.copy(transform = reduce(it.transform)) }
+
+    private fun updateResize(tag: String?, reduce: (ImageOp.Resize) -> ImageOp.Resize) =
+        mutate(tag) { it.copy(resize = reduce(it.resize)) }
+
+    private fun updateAdjust(tag: String?, reduce: (ImageOp.Adjust) -> ImageOp.Adjust) =
+        mutate(tag) { it.copy(adjust = reduce(it.adjust)) }
+
+    private fun updateAndPreview(tag: String?, reduce: (EditorUiState) -> EditorUiState) =
+        mutate(tag = tag, reduce = reduce)
+
+    // --- Edit history (undo/redo) ---
+
+    /**
+     * Applies an edit: records the pre-edit state for undo (coalescing a run of
+     * edits that share a non-null [tag], e.g. a single slider drag), mutates the
+     * state, refreshes the undo/redo flags and re-renders the preview.
+     */
+    private fun mutate(
+        tag: String?,
+        preview: Boolean = true,
+        reduce: (EditorUiState) -> EditorUiState,
+    ) {
+        recordHistory(tag)
+        _uiState.update { reduce(it).copy(canUndo = undoStack.isNotEmpty(), canRedo = redoStack.isNotEmpty()) }
+        if (preview) regeneratePreview()
+    }
+
+    /** Pushes the current edit snapshot onto the undo stack, unless coalesced. */
+    private fun recordHistory(tag: String?) {
+        // A run of same-tag edits (one continuous interaction) collapses to a
+        // single undo step: only the first captures the pre-edit state.
+        if (tag != null && tag == lastHistoryTag) return
+        undoStack.addLast(_uiState.value.snapshot())
+        if (undoStack.size > MAX_HISTORY) undoStack.removeFirst()
+        redoStack.clear()
+        lastHistoryTag = tag
+    }
+
+    /** Reverts to the previous edit state. */
+    fun onUndo() {
+        if (undoStack.isEmpty()) return
+        redoStack.addLast(_uiState.value.snapshot())
+        val previous = undoStack.removeLast()
+        lastHistoryTag = null
+        applySnapshot(previous)
+    }
+
+    /** Re-applies an edit state that was undone. */
+    fun onRedo() {
+        if (redoStack.isEmpty()) return
+        undoStack.addLast(_uiState.value.snapshot())
+        val next = redoStack.removeLast()
+        lastHistoryTag = null
+        applySnapshot(next)
+    }
+
+    /** Clears every edit back to defaults (recorded as one undoable step). */
+    fun onResetAllEdits() {
+        if (!_uiState.value.hasAnyEdits) return
+        recordHistory(tag = null)
+        applySnapshot(EditSnapshot.PRISTINE)
+    }
+
+    private fun applySnapshot(snapshot: EditSnapshot) {
+        _uiState.update {
+            it.restore(snapshot).copy(
+                canUndo = undoStack.isNotEmpty(),
+                canRedo = redoStack.isNotEmpty(),
+            )
+        }
         regeneratePreview()
     }
 
@@ -270,7 +430,7 @@ class EditorViewModel @Inject constructor(
     private fun regeneratePreview() {
         val state = _uiState.value
         val source = state.selectedSource ?: return
-        if (!state.config.isRenderable) {
+        if (state.pipeline.isEmpty) {
             _uiState.update { it.copy(previewImage = null) }
             return
         }
@@ -279,7 +439,7 @@ class EditorViewModel @Inject constructor(
         previewJob = viewModelScope.launch {
             delay(PREVIEW_DEBOUNCE_MS)
             _uiState.update { it.copy(isRendering = true) }
-            when (val result = applyWatermark(source, _uiState.value.config)) {
+            when (val result = applyPipeline(source, _uiState.value.pipeline)) {
                 is Outcome.Success ->
                     _uiState.update { it.copy(previewImage = result.data, isRendering = false) }
                 is Outcome.Failure ->
@@ -298,5 +458,6 @@ class EditorViewModel @Inject constructor(
         const val MIN_IMAGE_RATIO = 0.05f
         const val MAX_IMAGE_RATIO = 0.8f
         const val MAX_SPACING_RATIO = 3f
+        const val MAX_HISTORY = 50
     }
 }

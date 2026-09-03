@@ -1,5 +1,8 @@
 package com.momi.watermarker.presentation.editor
 
+import com.momi.watermarker.domain.model.ExportOptions
+import com.momi.watermarker.domain.model.ImageOp
+import com.momi.watermarker.domain.model.Pipeline
 import com.momi.watermarker.domain.model.WatermarkConfig
 import com.momi.watermarker.domain.model.WatermarkFont
 import com.momi.watermarker.domain.model.WatermarkImage
@@ -16,6 +19,8 @@ data class EditorUiState(
     val sourceImages: List<WatermarkImage> = emptyList(),
     /** Index into [sourceImages] currently shown in the preview. */
     val selectedIndex: Int = 0,
+    /** Which editing tool's control panel is currently shown. */
+    val selectedTool: EditorTool = EditorTool.DEFAULT,
     /**
      * True when the current batch was picked from the gallery, so the originals
      * exist there and can be offered for deletion. Camera captures are not in
@@ -25,8 +30,23 @@ data class EditorUiState(
     /** The rendered, watermarked preview of the selected source image. */
     val previewImage: WatermarkImage? = null,
     val config: WatermarkConfig = WatermarkConfig(text = "© MomiWaterMarker"),
+    /** Rectangular crop contributed by the Crop tool. */
+    val crop: ImageOp.Crop = ImageOp.Crop(),
+    /** Rotate/flip settings contributed by the Transform tool. */
+    val transform: ImageOp.Transform = ImageOp.Transform(),
+    /** Downscale settings contributed by the Resize tool. */
+    val resize: ImageOp.Resize = ImageOp.Resize(),
+    /** Preset color filter contributed by the Filters tool. */
+    val filter: ImageOp.Filter = ImageOp.Filter(),
+    /** Fine-grained color adjustments contributed by the Adjust tool. */
+    val adjust: ImageOp.Adjust = ImageOp.Adjust(),
+    /** Encoding (format + quality) applied at export by the Compress tool. */
+    val exportOptions: ExportOptions = ExportOptions(),
     val availablePatterns: List<WatermarkPattern> = emptyList(),
     val availableFonts: List<WatermarkFont> = emptyList(),
+    /** Whether there is a prior edit state to undo / redo. */
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
     val isRendering: Boolean = false,
     val isSaving: Boolean = false,
 ) {
@@ -38,7 +58,43 @@ data class EditorUiState(
     /** Whether a "delete originals" choice should be offered at save time. */
     val canDeleteOriginals: Boolean get() = sourceFromGallery && sourceImages.isNotEmpty()
 
-    val canSave: Boolean get() = hasImage && config.isRenderable && !isSaving && !isRendering
+    /**
+     * The ordered edit pipeline assembled from the current tool settings. Ops are
+     * added in a fixed, sensible order (geometry first, watermark last) and this
+     * same pipeline is applied to every image in the batch. Compression is not an
+     * op — it is applied at export via [exportOptions]. Further tools (crop,
+     * filters, ...) contribute their own ops here as they land.
+     */
+    val pipeline: Pipeline
+        get() = Pipeline(
+            buildList {
+                if (!crop.isIdentity) add(crop)
+                if (!transform.isIdentity) add(transform)
+                if (!resize.isIdentity) add(resize)
+                if (!filter.isIdentity) add(filter)
+                if (!adjust.isIdentity) add(adjust)
+                if (config.isRenderable) add(ImageOp.Watermark(config))
+            },
+        )
+
+    /**
+     * Whether there is any edit to preview: a non-empty pipeline. (Export-only
+     * changes like compression have no visible preview, so they don't count here.)
+     */
+    val hasPreviewableEdits: Boolean get() = pipeline.isNotEmpty
+
+    /** Whether any editing has been done (used to enable a global "reset all"). */
+    val hasAnyEdits: Boolean
+        get() = !crop.isIdentity || !transform.isIdentity || !resize.isIdentity ||
+            !filter.isIdentity || !adjust.isIdentity || config.isRenderable ||
+            exportOptions != ExportOptions()
+
+    /**
+     * Save is available whenever an image is loaded — even with no edits, since
+     * re-encoding per [exportOptions] (compression / format conversion) is itself
+     * a valid batch action.
+     */
+    val canSave: Boolean get() = hasImage && !isSaving && !isRendering
 }
 
 /** One-shot side effects the screen must react to (not part of durable state). */
