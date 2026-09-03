@@ -31,7 +31,7 @@ import kotlin.math.roundToInt
 @Composable
 fun <T> OptionChipRow(
     options: List<T>,
-    selected: T,
+    selected: T?,
     labelOf: (T) -> String,
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
@@ -89,6 +89,63 @@ fun ColorSwatchRow(
                 }
             }
         }
+    }
+}
+
+/**
+ * An RGB color picker: a live preview swatch with the numeric `RGB(r, g, b)`
+ * value, plus one 0–255 slider per channel. [colorArgb]'s alpha is ignored;
+ * [onColorChanged] always reports an opaque color.
+ */
+@Composable
+fun RgbColorPicker(
+    colorArgb: Int,
+    onColorChanged: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val r = (colorArgb shr 16) and 0xFF
+    val g = (colorArgb shr 8) and 0xFF
+    val b = colorArgb and 0xFF
+
+    fun argb(red: Int, green: Int, blue: Int): Int =
+        (0xFF shl 24) or (red shl 16) or (green shl 8) or blue
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(Color(argb(r, g, b)))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+            ) {}
+            Text(
+                text = "RGB($r, $g, $b)",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        ChannelSlider("R", r) { onColorChanged(argb(it, g, b)) }
+        ChannelSlider("G", g) { onColorChanged(argb(r, it, b)) }
+        ChannelSlider("B", b) { onColorChanged(argb(r, g, it)) }
+    }
+}
+
+/** A single 0–255 color-channel slider labeled with its current value. */
+@Composable
+private fun ChannelSlider(label: String, value: Int, onValueChange: (Int) -> Unit) {
+    Column {
+        Text(
+            text = "$label — $value",
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.roundToInt()) },
+            valueRange = 0f..255f,
+        )
     }
 }
 

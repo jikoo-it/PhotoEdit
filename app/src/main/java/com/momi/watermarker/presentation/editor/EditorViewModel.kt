@@ -232,6 +232,13 @@ class EditorViewModel @Inject constructor(
     fun onFilterSelected(filter: PhotoFilter) =
         updateAndPreview(tag = null) { it.copy(filter = ImageOp.Filter(filter)) }
 
+    /**
+     * Applies a user-picked custom color tint, clearing any preset. Coalesced
+     * under one undo step since it is driven by dragging the RGB sliders.
+     */
+    fun onCustomTintChanged(colorArgb: Int) =
+        updateAndPreview("filter.tint") { it.copy(filter = ImageOp.Filter(customTintArgb = colorArgb)) }
+
     // --- Adjustment events ---
 
     fun onBrightnessChanged(value: Float) =

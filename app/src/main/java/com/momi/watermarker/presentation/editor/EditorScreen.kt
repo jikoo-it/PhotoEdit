@@ -14,6 +14,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,7 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,6 +78,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -103,6 +106,7 @@ import com.momi.watermarker.presentation.editor.components.ColorSwatchRow
 import com.momi.watermarker.presentation.editor.components.ImageCropperScreen
 import com.momi.watermarker.presentation.editor.components.OptionChipRow
 import com.momi.watermarker.presentation.editor.components.PercentSlider
+import com.momi.watermarker.presentation.editor.components.RgbColorPicker
 
 /** Predefined watermark colors offered to the user. */
 private val PRESET_COLORS = listOf(
@@ -119,6 +123,9 @@ private val PRESET_COLORS = listOf(
 
 /** "Longest side" resize presets (in pixels) offered to the user. */
 private val MAX_DIMENSION_PRESETS = listOf(1024, 2048, 4096)
+
+/** Starting color shown in the custom-tint RGB picker before the user picks one. */
+private const val DEFAULT_CUSTOM_TINT = 0xFF2196F3.toInt()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,8 +147,8 @@ fun EditorScreen(
     var mainCropUri by rememberSaveable { mutableStateOf<String?>(null) }
     // Whether the "add images" source picker (camera/gallery) is showing.
     var showAddSheet by remember { mutableStateOf(false) }
-    // The image shown in the full-screen preview viewer, if any.
-    var fullScreenUri by rememberSaveable { mutableStateOf<String?>(null) }
+    // The image index shown in the full-screen (swipeable) preview viewer, if any.
+    var fullScreenIndex by rememberSaveable { mutableStateOf<Int?>(null) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia()
@@ -226,58 +233,66 @@ fun EditorScreen(
                 )
             },
         ) { innerPadding ->
-            Column(
+            BoxWithConstraints(
                 modifier = Modifier
                     .padding(innerPadding)
                     .fillMaxSize(),
             ) {
-                // Fixed header: the preview, the image strip and the add action
-                // stay put; only the editing form below them scrolls.
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    PreviewArea(
-                        imageUri = uiState.previewImage?.uri ?: uiState.selectedSource?.uri,
-                        info = uiState.selectedImageInfo,
-                        isRendering = uiState.isRendering,
-                        onOpenFullScreen = { uri -> fullScreenUri = uri },
-                    )
-
-                    ThumbnailStrip(
-                        images = uiState.sourceImages,
-                        selectedIndex = uiState.selectedIndex,
-                        onSelect = viewModel::onImageFocused,
-                        onRemove = viewModel::onImageRemoved,
-                        onAdd = { showAddSheet = true },
-                    )
-                    if (uiState.hasMultipleImages) {
-                        Text(
-                            text = "Edits apply to all ${uiState.imageCount} images.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-
-                if (uiState.hasImage) {
-                    ToolSwitcher(
-                        tools = uiState.visibleTools,
-                        selected = uiState.selectedTool,
-                        onSelect = viewModel::onToolSelected,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-
-                    // Only the editing form scrolls.
+                val halfHeight = maxHeight * 0.5f
+                Column(modifier = Modifier.fillMaxSize()) {
+                    // Top region — the swipeable preview pager and the tool
+                    // switcher. Capped at half the screen height (when an image is
+                    // loaded) so the editing form below always gets the other half.
                     Column(
                         modifier = Modifier
-                            .weight(1f)
                             .fillMaxWidth()
-                            .verticalScroll(rememberScrollState())
+                            .then(
+                                if (uiState.hasImage) Modifier.heightIn(max = halfHeight)
+                                else Modifier.weight(1f)
+                            )
                             .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        when (uiState.selectedTool) {
+                        PreviewPager(
+                            images = uiState.sourceImages,
+                            selectedIndex = uiState.selectedIndex,
+                            previewUri = uiState.previewImage?.uri,
+                            info = uiState.selectedImageInfo,
+                            sizeBytes = uiState.displayedSizeBytes,
+                            isRendering = uiState.isRendering,
+                            onPageSettled = viewModel::onImageFocused,
+                            onOpenFullScreen = { index -> fullScreenIndex = index },
+                            onAdd = { showAddSheet = true },
+                            onRemove = viewModel::onImageRemoved,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (uiState.hasMultipleImages) {
+                            Text(
+                                text = "Edits apply to all ${uiState.imageCount} images.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (uiState.hasImage) {
+                            ToolSwitcher(
+                                tools = uiState.visibleTools,
+                                selected = uiState.selectedTool,
+                                onSelect = viewModel::onToolSelected,
+                            )
+                        }
+                    }
+
+                    if (uiState.hasImage) {
+                        // Only the editing form scrolls; it fills the lower half.
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp),
+                        ) {
+                            when (uiState.selectedTool) {
                             EditorTool.CROP -> CropControls(
                                 state = uiState,
                                 viewModel = viewModel,
@@ -343,6 +358,7 @@ fun EditorScreen(
                                 else "  Save to gallery"
                             )
                         }
+                        }
                     }
                 }
             }
@@ -374,9 +390,15 @@ fun EditorScreen(
             )
         }
 
-        // Tap-to-zoom full-screen preview of the current image.
-        fullScreenUri?.let { uri ->
-            FullScreenPreview(imageUri = uri, onDismiss = { fullScreenUri = null })
+        // Tap-to-zoom, swipeable full-screen preview of the images.
+        fullScreenIndex?.let { index ->
+            if (uiState.sourceImages.isNotEmpty()) {
+                FullScreenPager(
+                    images = uiState.sourceImages,
+                    initialIndex = index.coerceIn(0, uiState.sourceImages.lastIndex),
+                    onDismiss = { fullScreenIndex = null },
+                )
+            }
         }
     }
 
@@ -410,66 +432,160 @@ fun EditorScreen(
     }
 }
 
+/**
+ * The large preview area as a swipeable pager: one page per source image plus a
+ * trailing "+" page to add more. Swiping to an image page focuses it (driving a
+ * re-render of the live preview for that image); the trailing page adds images.
+ */
 @Composable
-private fun PreviewArea(
-    imageUri: String?,
+private fun PreviewPager(
+    images: List<WatermarkImage>,
+    selectedIndex: Int,
+    previewUri: String?,
     info: ImageInfo?,
+    sizeBytes: Long?,
     isRendering: Boolean,
-    onOpenFullScreen: (String) -> Unit,
+    onPageSettled: (Int) -> Unit,
+    onOpenFullScreen: (Int) -> Unit,
+    onAdd: () -> Unit,
+    onRemove: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // One page per image, plus a trailing add page (so there's always a "+").
+    val pageCount = images.size + 1
+    val pagerState = rememberPagerState(
+        initialPage = selectedIndex.coerceIn(0, (pageCount - 1).coerceAtLeast(0)),
+        pageCount = { pageCount },
+    )
+
+    // Focus the settled image page so its live preview re-renders. The trailing
+    // add page doesn't change the selection.
+    LaunchedEffect(pagerState, images.size) {
+        snapshotFlow { pagerState.settledPage }.collect { page ->
+            if (page < images.size) onPageSettled(page)
+        }
+    }
+    // Keep the pager aligned when the selection changes elsewhere (e.g. removal).
+    LaunchedEffect(selectedIndex) {
+        if (selectedIndex < pageCount && selectedIndex != pagerState.currentPage) {
+            pagerState.animateScrollToPage(selectedIndex)
+        }
+    }
+
+    HorizontalPager(
+        state = pagerState,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+    ) { page ->
+        if (page < images.size) {
+            val isCurrent = page == pagerState.currentPage
+            // The rendered preview exists only for the focused image; other pages
+            // show their raw source.
+            val shownUri = if (isCurrent && previewUri != null) previewUri else images[page].uri
+            PreviewPage(
+                imageUri = shownUri,
+                info = if (isCurrent) info else null,
+                sizeBytes = if (isCurrent) sizeBytes else null,
+                isRendering = isCurrent && isRendering,
+                onOpenFullScreen = { onOpenFullScreen(page) },
+                onRemove = { onRemove(page) },
+            )
+        } else {
+            AddPage(onAdd = onAdd, hasImages = images.isNotEmpty())
+        }
+    }
+}
+
+/** A single image page: fit-scaled photo, size badge, and a remove button. */
+@Composable
+private fun PreviewPage(
+    imageUri: String,
+    info: ImageInfo?,
+    sizeBytes: Long?,
+    isRendering: Boolean,
+    onOpenFullScreen: () -> Unit,
+    onRemove: () -> Unit,
 ) {
     Box(
         modifier = Modifier
-            .fillMaxWidth()
-            // Bounded height (rather than a 1:1 square) so the controls stay
-            // on-screen on wide/landscape/tablet layouts.
-            .heightIn(min = 220.dp, max = 380.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .then(
-                if (imageUri != null) Modifier.clickable { onOpenFullScreen(imageUri) }
-                else Modifier
-            ),
+            .fillMaxSize()
+            .clickable(onClick = onOpenFullScreen),
         contentAlignment = Alignment.Center,
     ) {
-        if (imageUri != null) {
-            AsyncImage(
-                model = imageUri,
-                contentDescription = "Preview (tap to view full screen)",
-                // Fit shows the whole image without cropping it.
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
-            )
-            if (isRendering) {
-                CircularProgressIndicator()
-            }
-            // Dimensions / file-size badge in the corner.
-            info?.let {
-                Text(
-                    text = formatImageInfo(it),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(Color.Black.copy(alpha = 0.55f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-            }
-        } else {
+        AsyncImage(
+            model = imageUri,
+            contentDescription = "Preview (tap to view full screen)",
+            // Fit shows the whole image without cropping it.
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (isRendering) {
+            CircularProgressIndicator()
+        }
+        // Remove-this-image button.
+        Icon(
+            imageVector = Icons.Filled.Cancel,
+            contentDescription = "Remove image",
+            tint = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.8f))
+                .clickable(onClick = onRemove)
+                .padding(4.dp),
+        )
+        // Dimensions / file-size badge in the corner.
+        info?.let {
             Text(
-                text = "Add images with the + button to begin.",
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(24.dp),
+                text = formatImageInfo(it, sizeBytes),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
     }
 }
 
-/** "1024 × 768 · 245 KB" — dimensions and (when known) encoded size. */
-private fun formatImageInfo(info: ImageInfo): String {
+/** The trailing pager page: a big "+" that opens the add-source sheet. */
+@Composable
+private fun AddPage(onAdd: () -> Unit, hasImages: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(onClick = onAdd),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = "Add images",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(48.dp),
+            )
+            Text(
+                text = if (hasImages) "Add more images" else "Add images to begin",
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** "1024 × 768 · 245 KB" — dimensions from [info] and (when known) the [sizeBytes] file size. */
+private fun formatImageInfo(info: ImageInfo, sizeBytes: Long?): String {
     val dimensions = "${info.width} × ${info.height}"
-    val size = info.sizeBytes?.let { " · ${formatBytes(it)}" } ?: ""
+    val size = sizeBytes?.let { " · ${formatBytes(it)}" } ?: ""
     return dimensions + size
 }
 
@@ -479,22 +595,47 @@ private fun formatBytes(bytes: Long): String = when {
     else -> "$bytes B"
 }
 
-/** Full-screen, dark viewer for the current image; tap or the close button dismisses. */
+/**
+ * Full-screen, dark, swipeable viewer over all [images], opening at
+ * [initialIndex]. Swipe left/right to change image; the close button dismisses.
+ */
 @Composable
-private fun FullScreenPreview(imageUri: String, onDismiss: () -> Unit) {
+private fun FullScreenPager(
+    images: List<WatermarkImage>,
+    initialIndex: Int,
+    onDismiss: () -> Unit,
+) {
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex,
+        pageCount = { images.size },
+    )
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .clickable(onClick = onDismiss),
+            .background(Color.Black),
         contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(
-            model = imageUri,
-            contentDescription = "Full-screen preview",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(),
-        )
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            AsyncImage(
+                model = images[page].uri,
+                contentDescription = "Full-screen preview ${page + 1}",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (images.size > 1) {
+            Text(
+                text = "${pagerState.currentPage + 1} / ${images.size}",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
         IconButton(
             onClick = onDismiss,
             modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
@@ -524,73 +665,6 @@ private fun AddSourceSheet(
                 leadingContent = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
                 modifier = Modifier.clickable(onClick = onPickGallery),
             )
-        }
-    }
-}
-
-@Composable
-private fun ThumbnailStrip(
-    images: List<WatermarkImage>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    onRemove: (Int) -> Unit,
-    onAdd: () -> Unit,
-) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        itemsIndexed(images, key = { _, image -> image.uri }) { index, image ->
-            val selected = index == selectedIndex
-            Box(modifier = Modifier.size(64.dp)) {
-                AsyncImage(
-                    model = image.uri,
-                    contentDescription = "Image ${index + 1}",
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(
-                            width = if (selected) 2.dp else 1.dp,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.outlineVariant
-                            },
-                            shape = RoundedCornerShape(8.dp),
-                        )
-                        .clickable { onSelect(index) },
-                )
-                Icon(
-                    imageVector = Icons.Filled.Cancel,
-                    contentDescription = "Remove image ${index + 1}",
-                    tint = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(2.dp)
-                        .size(20.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surface)
-                        .clickable { onRemove(index) },
-                )
-            }
-        }
-        item {
-            Box(
-                modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        shape = RoundedCornerShape(8.dp),
-                    )
-                    .clickable(onClick = onAdd),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "Add images",
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-            }
         }
     }
 }
@@ -949,14 +1023,34 @@ private fun FilterControls(
     state: EditorUiState,
     viewModel: EditorViewModel,
 ) {
+    val filter = state.filter
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ControlLabel("Filter")
+        ControlLabel("Preset")
         OptionChipRow(
             options = PhotoFilter.entries,
-            selected = state.filter.filter,
+            // No preset is highlighted while a custom color tint is active.
+            selected = if (filter.hasCustomTint) null else filter.filter,
             labelOf = { it.label },
             onSelected = viewModel::onFilterSelected,
         )
+
+        ControlLabel("Custom color tint")
+        Text(
+            text = "Pick any color to wash the image with it; this replaces the preset.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        RgbColorPicker(
+            colorArgb = filter.customTintArgb ?: DEFAULT_CUSTOM_TINT,
+            onColorChanged = viewModel::onCustomTintChanged,
+        )
+
+        if (filter.hasCustomTint) {
+            TextButton(onClick = { viewModel.onFilterSelected(PhotoFilter.NONE) }) {
+                Text("Remove color tint")
+            }
+        }
     }
 }
 

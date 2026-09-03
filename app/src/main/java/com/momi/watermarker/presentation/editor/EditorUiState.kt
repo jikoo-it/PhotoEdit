@@ -99,6 +99,19 @@ data class EditorUiState(
     val producesTransparency: Boolean get() = crop.hasTransparency || frame.hasTransparency
 
     /**
+     * The file size to show in the preview badge. It reflects the *real* file
+     * size: the loaded image's on-disk size when nothing has been changed, and
+     * otherwise the estimated size of the file that will be written on save
+     * (rendered pixels encoded with the current [exportOptions]).
+     */
+    val displayedSizeBytes: Long?
+        get() = if (!hasPreviewableEdits && exportOptions == ExportOptions()) {
+            selectedImageInfo?.sizeBytes
+        } else {
+            estimatedExportSize ?: selectedImageInfo?.sizeBytes
+        }
+
+    /**
      * The tools available for the current batch: single-image-only tools (see
      * [EditorTool.supportsBatch]) are hidden while multiple images are selected.
      */

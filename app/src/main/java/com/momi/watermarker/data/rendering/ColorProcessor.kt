@@ -21,10 +21,12 @@ import javax.inject.Singleton
 @Singleton
 class ColorProcessor @Inject constructor() {
 
-    /** Applies [op]'s preset. Returns [src] when the filter is the identity. */
+    /** Applies [op]'s preset or custom tint. Returns [src] when the filter is the identity. */
     fun filter(src: Bitmap, op: ImageOp.Filter): Bitmap {
         if (op.isIdentity) return src
-        return applyMatrix(src, matrixFor(op.filter))
+        // A user-picked color tint takes precedence over the named preset.
+        val matrix = op.customTintArgb?.let(::customTint) ?: matrixFor(op.filter)
+        return applyMatrix(src, matrix)
     }
 
     /** Applies [op]'s adjustments. Returns [src] when nothing is adjusted. */
@@ -147,6 +149,23 @@ class ColorProcessor @Inject constructor() {
         PhotoFilter.VIOLET -> tint(1.05f, 0.7f, 1.25f)
     }
 
+    /**
+     * A color-tint matrix for a user-picked [argb] color. Each channel of the
+     * chosen color is mapped into the same tasteful `[TINT_FLOOR, TINT_FLOOR +
+     * TINT_SPAN]` scale the presets use, so the picked hue washes the image
+     * without fully crushing the other channels.
+     */
+    private fun customTint(argb: Int): ColorMatrix {
+        val r = (argb shr 16 and 0xFF) / 255f
+        val g = (argb shr 8 and 0xFF) / 255f
+        val b = (argb and 0xFF) / 255f
+        return tint(
+            TINT_FLOOR + TINT_SPAN * r,
+            TINT_FLOOR + TINT_SPAN * g,
+            TINT_FLOOR + TINT_SPAN * b,
+        )
+    }
+
     /** A color-tint matrix: keeps some detail (partial desaturation) then pushes RGB toward the hue. */
     private fun tint(r: Float, g: Float, b: Float): ColorMatrix = ColorMatrix().apply {
         setSaturation(0.35f)
@@ -166,5 +185,9 @@ class ColorProcessor @Inject constructor() {
         const val HALF_255 = 127.5f
         const val BRIGHTNESS_RANGE = 100f
         const val WARMTH_RANGE = 30f
+
+        // Maps a picked color's 0..1 channel into the presets' [0.6, 1.25] scale.
+        const val TINT_FLOOR = 0.6f
+        const val TINT_SPAN = 0.65f
     }
 }

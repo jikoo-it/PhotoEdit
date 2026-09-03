@@ -107,9 +107,19 @@ sealed interface ImageOp {
         }
     }
 
-    /** Applies a named color preset ([PhotoFilter]) to the whole image. */
-    data class Filter(val filter: PhotoFilter = PhotoFilter.NONE) : ImageOp {
-        val isIdentity: Boolean get() = filter == PhotoFilter.NONE
+    /**
+     * A color filter over the whole image: either a named [PhotoFilter] preset
+     * or a user-picked [customTintArgb] color wash. A non-null [customTintArgb]
+     * takes precedence over [filter] (they are mutually exclusive in the UI).
+     */
+    data class Filter(
+        val filter: PhotoFilter = PhotoFilter.NONE,
+        val customTintArgb: Int? = null,
+    ) : ImageOp {
+        val isIdentity: Boolean get() = filter == PhotoFilter.NONE && customTintArgb == null
+
+        /** Whether a user-picked custom color tint is active. */
+        val hasCustomTint: Boolean get() = customTintArgb != null
     }
 
     /**
