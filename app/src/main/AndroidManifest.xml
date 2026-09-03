@@ -27,6 +27,18 @@
             </intent-filter>
         </activity>
 
+        <!-- Standalone launcher for the video editor (independent of MainActivity). -->
+        <activity
+            android:name=".presentation.video.VideoEditorActivity"
+            android:exported="true"
+            android:label="Momi Video"
+            android:theme="@style/Theme.MomiWaterMarker">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
