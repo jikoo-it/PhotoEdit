@@ -19,6 +19,8 @@ data class EditSnapshot(
     val resize: ImageOp.Resize,
     val filter: ImageOp.Filter,
     val adjust: ImageOp.Adjust,
+    val pixelate: ImageOp.Pixelate,
+    val frame: ImageOp.Frame,
     val config: WatermarkConfig,
     val exportOptions: ExportOptions,
 ) {
@@ -30,6 +32,8 @@ data class EditSnapshot(
             resize = ImageOp.Resize(),
             filter = ImageOp.Filter(),
             adjust = ImageOp.Adjust(),
+            pixelate = ImageOp.Pixelate(),
+            frame = ImageOp.Frame(),
             config = WatermarkConfig(text = ""),
             exportOptions = ExportOptions(),
         )
@@ -43,6 +47,8 @@ fun EditorUiState.snapshot(): EditSnapshot = EditSnapshot(
     resize = resize,
     filter = filter,
     adjust = adjust,
+    pixelate = pixelate,
+    frame = frame,
     config = config,
     exportOptions = exportOptions,
 )
@@ -54,6 +60,8 @@ fun EditorUiState.restore(snapshot: EditSnapshot): EditorUiState = copy(
     resize = snapshot.resize,
     filter = snapshot.filter,
     adjust = snapshot.adjust,
+    pixelate = snapshot.pixelate,
+    frame = snapshot.frame,
     config = snapshot.config,
     exportOptions = snapshot.exportOptions,
 )

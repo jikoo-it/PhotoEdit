@@ -19,7 +19,11 @@ import kotlin.math.roundToInt
 @Singleton
 class GeometryProcessor @Inject constructor() {
 
-    /** Crops [src] to [op]'s rectangle. Returns [src] when the crop is identity. */
+    /**
+     * Crops [src] to [op]'s rectangle and masks it to [op]'s shape. Returns [src]
+     * when the crop is identity. Never recycles [src]; any intermediate rectangle
+     * bitmap created here is recycled before returning the shaped result.
+     */
     fun crop(src: Bitmap, op: ImageOp.Crop): Bitmap {
         if (op.isIdentity) return src
         val rect = op.rect
@@ -29,8 +33,13 @@ class GeometryProcessor @Inject constructor() {
         val top = (rect.top * src.height).roundToInt().coerceIn(0, src.height - 1)
         val width = (rect.width * src.width).roundToInt().coerceIn(1, src.width - left)
         val height = (rect.height * src.height).roundToInt().coerceIn(1, src.height - top)
-        if (left == 0 && top == 0 && width == src.width && height == src.height) return src
-        return Bitmap.createBitmap(src, left, top, width, height)
+        val isFullFrame = left == 0 && top == 0 && width == src.width && height == src.height
+        val rectangular = if (isFullFrame) src else Bitmap.createBitmap(src, left, top, width, height)
+        val shaped = maskToShape(rectangular, op.shape)
+        // Recycle the rectangular intermediate we made, unless it's the caller's
+        // source or the shaped result returned it unchanged.
+        if (rectangular !== src && rectangular !== shaped) rectangular.recycle()
+        return shaped
     }
 
     /** Rotates and/or flips [src] per [op]. Returns [src] when [op] is identity. */

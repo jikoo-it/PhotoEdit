@@ -7,13 +7,19 @@ package com.momi.watermarker.presentation.editor
  *
  * Tools are added here as each is implemented; the tool switcher renders the
  * full set and swaps the control panel to match the selection.
+ *
+ * [supportsBatch] is false for tools that only make sense on a single image
+ * (e.g. cropping to a specific composition); those are hidden while more than
+ * one image is selected.
  */
-enum class EditorTool(val label: String) {
-    CROP("Crop"),
+enum class EditorTool(val label: String, val supportsBatch: Boolean = true) {
+    CROP("Crop", supportsBatch = false),
     TRANSFORM("Transform"),
     RESIZE("Resize"),
     FILTER("Filters"),
     ADJUST("Adjust"),
+    PIXELATE("Pixelate"),
+    FRAME("Frame"),
     WATERMARK("Watermark"),
     EXPORT("Export");
 

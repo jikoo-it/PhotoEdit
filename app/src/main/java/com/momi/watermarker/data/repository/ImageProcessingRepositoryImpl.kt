@@ -6,6 +6,7 @@ import com.momi.watermarker.data.rendering.PipelineRenderer
 import com.momi.watermarker.data.storage.ImageStorage
 import com.momi.watermarker.di.DefaultDispatcher
 import com.momi.watermarker.domain.model.ExportOptions
+import com.momi.watermarker.domain.model.ImageInfo
 import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.Pipeline
 import com.momi.watermarker.domain.model.WatermarkImage
@@ -40,14 +41,32 @@ class ImageProcessingRepositoryImpl @Inject constructor(
                 val outputUri = imageStorage.writeToCache(
                     bitmap = result,
                     prefix = "processed",
-                    format = export.format,
-                    quality = export.effectiveQuality,
+                    export = export,
                 )
                 if (result !== bitmap) result.recycle()
                 WatermarkImage(outputUri.toString())
             } finally {
                 bitmap.recycle()
                 watermarkBitmaps.values.forEach(Bitmap::recycle)
+            }
+        }
+    }
+
+    override suspend fun imageInfo(source: WatermarkImage): Outcome<ImageInfo> =
+        withContext(dispatcher) {
+            Outcome.catching { imageStorage.readImageInfo(Uri.parse(source.uri)) }
+        }
+
+    override suspend fun estimateExportSize(
+        source: WatermarkImage,
+        export: ExportOptions,
+    ): Outcome<Long> = withContext(dispatcher) {
+        Outcome.catching {
+            val bitmap = imageStorage.decodeBitmap(Uri.parse(source.uri))
+            try {
+                imageStorage.measureEncodedSize(bitmap, export)
+            } finally {
+                bitmap.recycle()
             }
         }
     }

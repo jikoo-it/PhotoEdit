@@ -32,11 +32,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BorderOuter
 import androidx.compose.material.icons.filled.BrandingWatermark
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.FilterVintage
 import androidx.compose.material.icons.filled.Flip
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -52,7 +55,9 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -74,6 +79,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -82,7 +88,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
+import com.momi.watermarker.domain.model.CompressionMode
+import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.ExportFormat
+import com.momi.watermarker.domain.model.ExportOptions
+import com.momi.watermarker.domain.model.FrameStyle
+import com.momi.watermarker.domain.model.ImageInfo
 import com.momi.watermarker.domain.model.PhotoFilter
 import com.momi.watermarker.domain.model.ResizeMode
 import com.momi.watermarker.domain.model.WatermarkImage
@@ -127,6 +138,10 @@ fun EditorScreen(
     var cropSourceUri by rememberSaveable { mutableStateOf<String?>(null) }
     // The source image currently being cropped in the main editor, if any.
     var mainCropUri by rememberSaveable { mutableStateOf<String?>(null) }
+    // Whether the "add images" source picker (camera/gallery) is showing.
+    var showAddSheet by remember { mutableStateOf(false) }
+    // The image shown in the full-screen preview viewer, if any.
+    var fullScreenUri by rememberSaveable { mutableStateOf<String?>(null) }
 
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickMultipleVisualMedia()
@@ -214,101 +229,120 @@ fun EditorScreen(
             Column(
                 modifier = Modifier
                     .padding(innerPadding)
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .fillMaxSize(),
             ) {
-                PreviewArea(
-                    imageUri = uiState.previewImage?.uri ?: uiState.selectedSource?.uri,
-                    isRendering = uiState.isRendering,
-                )
+                // Fixed header: the preview, the image strip and the add action
+                // stay put; only the editing form below them scrolls.
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    PreviewArea(
+                        imageUri = uiState.previewImage?.uri ?: uiState.selectedSource?.uri,
+                        info = uiState.selectedImageInfo,
+                        isRendering = uiState.isRendering,
+                        onOpenFullScreen = { uri -> fullScreenUri = uri },
+                    )
 
-                if (uiState.hasImage) {
                     ThumbnailStrip(
                         images = uiState.sourceImages,
                         selectedIndex = uiState.selectedIndex,
                         onSelect = viewModel::onImageFocused,
                         onRemove = viewModel::onImageRemoved,
-                        onAdd = pickGallery,
+                        onAdd = { showAddSheet = true },
                     )
                     if (uiState.hasMultipleImages) {
                         Text(
-                            text = "Watermark applies to all ${uiState.imageCount} images.",
+                            text = "Edits apply to all ${uiState.imageCount} images.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
 
-                SourceButtons(
-                    onPickGallery = pickGallery,
-                    onTakePhoto = viewModel::onCaptureRequested,
-                )
-
                 if (uiState.hasImage) {
                     ToolSwitcher(
+                        tools = uiState.visibleTools,
                         selected = uiState.selectedTool,
                         onSelect = viewModel::onToolSelected,
+                        modifier = Modifier.padding(horizontal = 16.dp),
                     )
 
-                    when (uiState.selectedTool) {
-                        EditorTool.CROP -> CropControls(
-                            state = uiState,
-                            viewModel = viewModel,
-                            onStartCrop = { mainCropUri = uiState.selectedSource?.uri },
-                        )
-                        EditorTool.TRANSFORM -> TransformControls(
-                            state = uiState,
-                            viewModel = viewModel,
-                        )
-                        EditorTool.RESIZE -> ResizeControls(
-                            state = uiState,
-                            viewModel = viewModel,
-                        )
-                        EditorTool.FILTER -> FilterControls(
-                            state = uiState,
-                            viewModel = viewModel,
-                        )
-                        EditorTool.ADJUST -> AdjustControls(
-                            state = uiState,
-                            viewModel = viewModel,
-                        )
-                        EditorTool.WATERMARK -> WatermarkControls(
-                            state = uiState,
-                            viewModel = viewModel,
-                            onPickWatermarkImage = {
-                                watermarkImageLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                )
-                            },
-                        )
-                        EditorTool.EXPORT -> ExportControls(
-                            state = uiState,
-                            viewModel = viewModel,
-                        )
-                    }
-
-                    if (uiState.hasAnyEdits) {
-                        TextButton(
-                            onClick = viewModel::onResetAllEdits,
-                            modifier = Modifier.align(Alignment.End),
-                        ) {
-                            Icon(Icons.Filled.RestartAlt, contentDescription = null)
-                            Text("  Reset all edits")
-                        }
-                    }
-
-                    Button(
-                        onClick = ::startSave,
-                        enabled = uiState.canSave,
-                        modifier = Modifier.fillMaxWidth(),
+                    // Only the editing form scrolls.
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        Icon(Icons.Filled.Save, contentDescription = null)
-                        Text(
-                            if (uiState.hasMultipleImages) "  Save ${uiState.imageCount} images"
-                            else "  Save to gallery"
-                        )
+                        when (uiState.selectedTool) {
+                            EditorTool.CROP -> CropControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                                onStartCrop = { mainCropUri = uiState.selectedSource?.uri },
+                            )
+                            EditorTool.TRANSFORM -> TransformControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                            )
+                            EditorTool.RESIZE -> ResizeControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                            )
+                            EditorTool.FILTER -> FilterControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                            )
+                            EditorTool.ADJUST -> AdjustControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                            )
+                            EditorTool.PIXELATE -> PixelateControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                            )
+                            EditorTool.FRAME -> FrameControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                            )
+                            EditorTool.WATERMARK -> WatermarkControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                                onPickWatermarkImage = {
+                                    watermarkImageLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
+                                },
+                            )
+                            EditorTool.EXPORT -> ExportControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                            )
+                        }
+
+                        if (uiState.hasAnyEdits) {
+                            TextButton(
+                                onClick = viewModel::onResetAllEdits,
+                                modifier = Modifier.align(Alignment.End),
+                            ) {
+                                Icon(Icons.Filled.RestartAlt, contentDescription = null)
+                                Text("  Reset all edits")
+                            }
+                        }
+
+                        Button(
+                            onClick = ::startSave,
+                            enabled = uiState.canSave,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Filled.Save, contentDescription = null)
+                            Text(
+                                if (uiState.hasMultipleImages) "  Save ${uiState.imageCount} images"
+                                else "  Save to gallery"
+                            )
+                        }
                     }
                 }
             }
@@ -326,19 +360,38 @@ fun EditorScreen(
             )
         }
 
-        // Rectangular crop of the main photo (no shape masking).
+        // Crop of the main photo, in any of the supported shapes.
         mainCropUri?.let { uri ->
             ImageCropperScreen(
                 imageUri = uri,
                 title = "Crop photo",
-                showShapeSelector = false,
-                onConfirm = { rect, _ ->
-                    viewModel.onCropChanged(rect)
+                showShapeSelector = true,
+                onConfirm = { rect, shape ->
+                    viewModel.onCropChanged(rect, shape)
                     mainCropUri = null
                 },
                 onCancel = { mainCropUri = null },
             )
         }
+
+        // Tap-to-zoom full-screen preview of the current image.
+        fullScreenUri?.let { uri ->
+            FullScreenPreview(imageUri = uri, onDismiss = { fullScreenUri = null })
+        }
+    }
+
+    if (showAddSheet) {
+        AddSourceSheet(
+            onPickGallery = {
+                showAddSheet = false
+                pickGallery()
+            },
+            onTakePhoto = {
+                showAddSheet = false
+                viewModel.onCaptureRequested()
+            },
+            onDismiss = { showAddSheet = false },
+        )
     }
 
     if (showSaveDialog) {
@@ -358,32 +411,118 @@ fun EditorScreen(
 }
 
 @Composable
-private fun PreviewArea(imageUri: String?, isRendering: Boolean) {
+private fun PreviewArea(
+    imageUri: String?,
+    info: ImageInfo?,
+    isRendering: Boolean,
+    onOpenFullScreen: (String) -> Unit,
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            // Bounded height (rather than a 1:1 square) so the source buttons and
-            // controls stay on-screen on wide/landscape/tablet layouts.
+            // Bounded height (rather than a 1:1 square) so the controls stay
+            // on-screen on wide/landscape/tablet layouts.
             .heightIn(min = 220.dp, max = 380.dp)
-            .clip(RoundedCornerShape(16.dp)),
+            .clip(RoundedCornerShape(16.dp))
+            .then(
+                if (imageUri != null) Modifier.clickable { onOpenFullScreen(imageUri) }
+                else Modifier
+            ),
         contentAlignment = Alignment.Center,
     ) {
         if (imageUri != null) {
             AsyncImage(
                 model = imageUri,
-                contentDescription = "Watermark preview",
+                contentDescription = "Preview (tap to view full screen)",
+                // Fit shows the whole image without cropping it.
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
             if (isRendering) {
                 CircularProgressIndicator()
             }
+            // Dimensions / file-size badge in the corner.
+            info?.let {
+                Text(
+                    text = formatImageInfo(it),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
         } else {
             Text(
-                text = "Pick images from your gallery or take a photo to begin.",
+                text = "Add images with the + button to begin.",
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(24.dp),
+            )
+        }
+    }
+}
+
+/** "1024 × 768 · 245 KB" — dimensions and (when known) encoded size. */
+private fun formatImageInfo(info: ImageInfo): String {
+    val dimensions = "${info.width} × ${info.height}"
+    val size = info.sizeBytes?.let { " · ${formatBytes(it)}" } ?: ""
+    return dimensions + size
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1_000_000 -> "%.1f MB".format(bytes / 1_000_000.0)
+    bytes >= 1_000 -> "${bytes / 1_000} KB"
+    else -> "$bytes B"
+}
+
+/** Full-screen, dark viewer for the current image; tap or the close button dismisses. */
+@Composable
+private fun FullScreenPreview(imageUri: String, onDismiss: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .clickable(onClick = onDismiss),
+        contentAlignment = Alignment.Center,
+    ) {
+        AsyncImage(
+            model = imageUri,
+            contentDescription = "Full-screen preview",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+        ) {
+            Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+        }
+    }
+}
+
+/** Bottom sheet offering the two ways to add images: camera or gallery. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddSourceSheet(
+    onPickGallery: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+            ListItem(
+                headlineContent = { Text("Take a photo") },
+                leadingContent = { Icon(Icons.Filled.PhotoCamera, contentDescription = null) },
+                modifier = Modifier.clickable(onClick = onTakePhoto),
+            )
+            ListItem(
+                headlineContent = { Text("Choose from gallery") },
+                leadingContent = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
+                modifier = Modifier.clickable(onClick = onPickGallery),
             )
         }
     }
@@ -452,20 +591,6 @@ private fun ThumbnailStrip(
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SourceButtons(onPickGallery: () -> Unit, onTakePhoto: () -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedButton(onClick = onPickGallery, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Filled.PhotoLibrary, contentDescription = null)
-            Text("  Gallery")
-        }
-        OutlinedButton(onClick = onTakePhoto, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Filled.PhotoCamera, contentDescription = null)
-            Text("  Camera")
         }
     }
 }
@@ -610,9 +735,15 @@ private fun CropControls(
         Text(
             text = if (cropped) {
                 val r = state.crop.rect
-                "Cropped to ${(r.width * 100).toInt()}% × ${(r.height * 100).toInt()}% of the original."
+                val shapeNote = if (state.crop.shape != CropShape.RECTANGLE) {
+                    " · ${state.crop.shape.displayName} shape"
+                } else {
+                    ""
+                }
+                "Cropped to ${(r.width * 100).toInt()}% × ${(r.height * 100).toInt()}% " +
+                    "of the original$shapeNote."
             } else {
-                "Tap to open the cropper. The same crop is applied to every image in the batch."
+                "Tap to open the cropper. Choose any shape; the same crop is applied to every image."
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -745,22 +876,69 @@ private fun ExportControls(
         }
 
         if (export.format.supportsQuality) {
-            ControlLabel("Quality: ${export.quality}")
-            Slider(
-                value = export.quality.toFloat(),
-                onValueChange = { viewModel.onExportQualityChanged(it.toInt()) },
-                valueRange = 10f..100f,
-            )
-            Text(
-                text = "Lower quality means smaller files.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            ControlLabel("Compression")
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                CompressionMode.entries.forEachIndexed { index, mode ->
+                    SegmentedButton(
+                        selected = export.mode == mode,
+                        onClick = { viewModel.onCompressionModeSelected(mode) },
+                        shape = SegmentedButtonDefaults.itemShape(index, CompressionMode.entries.size),
+                    ) {
+                        Text(if (mode == CompressionMode.QUALITY) "Quality" else "Target size")
+                    }
+                }
+            }
+
+            when (export.mode) {
+                CompressionMode.QUALITY -> {
+                    ControlLabel("Quality: ${export.quality}")
+                    Slider(
+                        value = export.quality.toFloat(),
+                        onValueChange = { viewModel.onExportQualityChanged(it.toInt()) },
+                        valueRange = 10f..100f,
+                    )
+                    Text(
+                        text = "Lower quality means smaller files.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                CompressionMode.TARGET_SIZE -> {
+                    ControlLabel("Target size")
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        ExportOptions.TARGET_SIZE_PRESETS.forEachIndexed { index, bytes ->
+                            SegmentedButton(
+                                selected = export.targetSizeBytes == bytes,
+                                onClick = { viewModel.onTargetSizeSelected(bytes) },
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index,
+                                    ExportOptions.TARGET_SIZE_PRESETS.size,
+                                ),
+                            ) {
+                                Text(formatBytes(bytes))
+                            }
+                        }
+                    }
+                    Text(
+                        text = "Quality is chosen automatically to fit within the target size.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         } else {
             Text(
                 text = "${export.format.label} is lossless; quality doesn't apply.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        state.estimatedExportSize?.let { estimate ->
+            Text(
+                text = "Estimated size of the shown image: ${formatBytes(estimate)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
@@ -801,6 +979,89 @@ private fun AdjustControls(
     }
 }
 
+@Composable
+private fun PixelateControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+) {
+    val block = state.pixelate.blockSizePx
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ControlLabel(
+            if (state.pixelate.isIdentity) "Block size: off" else "Block size: $block px"
+        )
+        Slider(
+            value = block.toFloat(),
+            onValueChange = { viewModel.onPixelateBlockChanged(it.toInt()) },
+            valueRange = 1f..64f,
+        )
+        Text(
+            text = "Larger blocks give a coarser mosaic. Slide to 1 to turn the effect off.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        if (!state.pixelate.isIdentity) {
+            TextButton(onClick = viewModel::onResetPixelate) { Text("Turn off pixelate") }
+        }
+    }
+}
+
+@Composable
+private fun FrameControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+) {
+    val frame = state.frame
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ControlLabel("Style")
+        OptionChipRow(
+            options = FrameStyle.entries,
+            selected = frame.style,
+            labelOf = { it.label },
+            onSelected = viewModel::onFrameStyleSelected,
+        )
+
+        if (frame.style != FrameStyle.NONE) {
+            PercentSlider(
+                label = if (frame.style == FrameStyle.SHADOW) "Shadow margin" else "Frame width",
+                value = frame.widthRatio,
+                onValueChange = viewModel::onFrameWidthChanged,
+                valueRange = 0.01f..0.25f,
+            )
+
+            // Rounded frames reveal the transparent background rather than paint a
+            // color, so a fill color only applies to the other styles.
+            if (frame.style != FrameStyle.ROUNDED) {
+                ControlLabel("Color")
+                ColorSwatchRow(
+                    colors = PRESET_COLORS,
+                    selectedArgb = frame.colorArgb,
+                    onSelected = viewModel::onFrameColorSelected,
+                )
+            }
+
+            if (frame.style == FrameStyle.ROUNDED) {
+                PercentSlider(
+                    label = "Corner radius",
+                    value = frame.cornerRadiusRatio,
+                    onValueChange = viewModel::onFrameCornerRadiusChanged,
+                    valueRange = 0f..0.5f,
+                )
+            }
+
+            TextButton(onClick = viewModel::onResetFrame) { Text("Remove frame") }
+        } else {
+            Text(
+                text = "Pick a style to frame every image in the batch.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 /** A slider for a bipolar `-1f..1f` adjustment, labeled with a signed percentage. */
 @Composable
 private fun SignedSlider(
@@ -822,11 +1083,13 @@ private fun SignedSlider(
 /** A horizontally-scrolling row of editing tools; the selected one is highlighted. */
 @Composable
 private fun ToolSwitcher(
+    tools: List<EditorTool>,
     selected: EditorTool,
     onSelect: (EditorTool) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(EditorTool.entries, key = { it.name }) { tool ->
+    LazyRow(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(tools, key = { it.name }) { tool ->
             val isSelected = tool == selected
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -864,6 +1127,8 @@ private val EditorTool.icon
         EditorTool.RESIZE -> Icons.Filled.PhotoSizeSelectLarge
         EditorTool.FILTER -> Icons.Filled.FilterVintage
         EditorTool.ADJUST -> Icons.Filled.Tune
+        EditorTool.PIXELATE -> Icons.Filled.GridOn
+        EditorTool.FRAME -> Icons.Filled.BorderOuter
         EditorTool.WATERMARK -> Icons.Filled.BrandingWatermark
         EditorTool.EXPORT -> Icons.Filled.Save
     }

@@ -1,6 +1,7 @@
 package com.momi.watermarker.domain.repository
 
 import com.momi.watermarker.domain.model.ExportOptions
+import com.momi.watermarker.domain.model.ImageInfo
 import com.momi.watermarker.domain.model.Pipeline
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.util.Outcome
@@ -24,4 +25,16 @@ interface ImageProcessingRepository {
         pipeline: Pipeline,
         export: ExportOptions = ExportOptions(),
     ): Outcome<WatermarkImage>
+
+    /**
+     * Reads [source]'s dimensions and encoded byte size without decoding the
+     * full bitmap into memory. Dimensions account for EXIF orientation.
+     */
+    suspend fun imageInfo(source: WatermarkImage): Outcome<ImageInfo>
+
+    /**
+     * Estimates the byte size [source]'s pixels would occupy when re-encoded per
+     * [export] (used to preview the effect of quality / target-size settings).
+     */
+    suspend fun estimateExportSize(source: WatermarkImage, export: ExportOptions): Outcome<Long>
 }

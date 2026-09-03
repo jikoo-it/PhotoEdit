@@ -14,6 +14,26 @@ and **font**, preview it live, and save the result to your gallery.
 - Live, pixel-accurate preview rendered by the real engine.
 - One-tap **save to gallery** (MediaStore → `Pictures/MomiWaterMarker`).
 
+## Roadmap / TODO
+
+Candidate advanced image-processing features. Each would land as a new
+`ImageOp` (or export option) with its own data-layer processor, slotting into
+the existing pipeline — so they compose with crop, filters, adjustments, and
+watermark.
+
+- [ ] **Edge detection** (Sobel / Canny) — outline extraction.
+- [ ] **Cartoonify** — edge-preserving smoothing + quantized colors + edge overlay.
+- [ ] **Gaussian blur** — with an adjustable radius (plus box / motion blur).
+- [ ] **Sharpen / unsharp mask** — edge enhancement.
+- [ ] **Histogram analysis** — live RGB / luminance histogram, plus **auto
+      contrast / histogram equalization** and levels.
+- [ ] **Denoise** — median / bilateral noise reduction.
+- [ ] **Vignette** — darkened / lightened edges.
+- [ ] **Auto-enhance** — one-tap brightness / contrast / white-balance correction.
+- [ ] **Perspective / skew correction** — straighten documents and buildings.
+- [ ] **Background removal / replacement** — subject segmentation.
+- [ ] **Grain / noise, duotone, gradient map** — additional stylized looks.
+
 ## Architecture
 
 Clean Architecture + MVVM, with the dependency rule pointing inward
