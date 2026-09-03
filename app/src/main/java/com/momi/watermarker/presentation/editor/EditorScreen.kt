@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BrandingWatermark
 import androidx.compose.material.icons.filled.Cancel
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PhotoSizeSelectLarge
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Rotate90DegreesCw
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Save
@@ -183,6 +186,14 @@ fun EditorScreen(
                 TopAppBar(
                     title = { Text("MomiWaterMarker") },
                     actions = {
+                        if (uiState.hasImage) {
+                            IconButton(onClick = viewModel::onUndo, enabled = uiState.canUndo) {
+                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                            }
+                            IconButton(onClick = viewModel::onRedo, enabled = uiState.canRedo) {
+                                Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo")
+                            }
+                        }
                         if (uiState.isSaving) {
                             CircularProgressIndicator(
                                 modifier = Modifier.padding(end = 16.dp),
@@ -276,6 +287,16 @@ fun EditorScreen(
                             state = uiState,
                             viewModel = viewModel,
                         )
+                    }
+
+                    if (uiState.hasAnyEdits) {
+                        TextButton(
+                            onClick = viewModel::onResetAllEdits,
+                            modifier = Modifier.align(Alignment.End),
+                        ) {
+                            Icon(Icons.Filled.RestartAlt, contentDescription = null)
+                            Text("  Reset all edits")
+                        }
                     }
 
                     Button(

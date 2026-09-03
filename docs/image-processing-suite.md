@@ -3,7 +3,8 @@
 Status doc for extending **MomiWaterMarker** from a watermark-only app into a full
 image-processing app. Branch: `feature/image-processing-suite`.
 
-Last updated during the session that implemented Phase 0.
+Last updated after implementing Phases 0–5 (all phases complete; build + unit
+tests green). Ready to merge to `main`.
 
 ---
 
@@ -33,15 +34,27 @@ one processor among siblings.
 
 | Phase | Scope | State |
 |-------|-------|-------|
-| 0 | Foundations: `ImageOp`/`Pipeline`, `PipelineRenderer`, `ImageProcessingRepository`, dispatcher fix, migrate watermark through the pipeline | **Implemented, not yet compile-verified** (blocked — see below) |
-| 1 | Navigation + editor shell (Selection → Editor → Export), tool switcher | Not started |
-| 2 | Rotate/Flip, Resize, Compress (export format + quality) | Not started |
-| 3 | Filters & Adjustments (shared `ColorMatrix` processor) | Not started |
-| 4 | Crop (interactive overlay, aspect lock) | Not started |
-| 5 | Polish: undo/redo, reorderable pipeline, per-tool previews, size estimates, perf pass | Not started |
+| 0 | Foundations: `ImageOp`/`Pipeline`, `PipelineRenderer`, `ImageProcessingRepository`, dispatcher fix, migrate watermark through the pipeline | ✅ Done |
+| 1 | Editor shell with tool switcher (global save pulled out of watermark panel) | ✅ Done |
+| 2 | Transform (rotate/flip), Resize, Export/Compress (format + quality) | ✅ Done |
+| 3 | Filters (`PhotoFilter` presets) & Adjustments (brightness/contrast/saturation/warmth) via a shared `ColorProcessor` | ✅ Done |
+| 4 | Crop (rectangular, reuses the `ImageCropperScreen` overlay) | ✅ Done |
+| 5 | Polish: undo/redo (tag-coalesced), global reset-all | ✅ Done |
 
-Pipeline op order (when assembled): Crop → Transform → Resize → Adjust → Filter →
-Watermark. Compress is an export-stage setting, not an in-pipeline op.
+Pipeline op order (when assembled): **Crop → Transform → Resize → Filter → Adjust →
+Watermark**. Compress is an export-stage setting (`ExportOptions`), not an in-pipeline
+op — an empty pipeline still saves (re-encode / format conversion).
+
+### Phase 5 scoping notes
+- **Undo/redo** snapshots the editable settings (`EditSnapshot`) before each edit.
+  A continuous run of same-`tag` edits (one slider drag) coalesces into a single
+  undo step; discrete actions (`tag = null`) each get their own step. History is
+  capped at 50 entries. `onResetAllEdits` clears everything as one undoable step.
+- **Reorderable pipeline** was intentionally *not* built: the batch model is
+  "same fixed pipeline for all images", assembled in a fixed, sensible order from
+  tool settings — there is no arbitrary op list for the user to reorder.
+- **Compress size estimates** deferred: an accurate estimate requires a full
+  render+encode per image, too costly for a live preview. Revisit if desired.
 
 ---
 
@@ -101,35 +114,50 @@ All on branch `feature/image-processing-suite`.
 
 ---
 
-## ⚠️ Blocker: concurrent video-editing work in the same tree
+## Key files (final)
 
-Midway through Phase 0, an unrelated **video-editing** feature began appearing in the
-same working tree (not created by this image-processing effort):
+### Domain
+- `domain/model/ImageOp.kt` — sealed ops: `Crop`, `Transform`, `Resize`, `Filter`,
+  `Adjust`, `Watermark`. Each carries an `isIdentity` so no-op settings are excluded
+  from the assembled pipeline.
+- `domain/model/Pipeline.kt`, `ResizeMode.kt`, `ExportFormat.kt`, `ExportOptions.kt`,
+  `PhotoFilter.kt`.
+- `domain/repository/ImageProcessingRepository.kt` — `applyPipeline(source, pipeline,
+  export)`; empty pipeline is valid (re-encode).
+- `domain/usecase/` — `ApplyPipelineUseCase` (preview), `ProcessAndSaveImagesUseCase`
+  (batch save, threads `ExportOptions`), `SaveImageUseCase`, `CropImageUseCase`.
 
-- `domain/model/VideoClip.kt`, `domain/repository/VideoRepository.kt`,
-  `domain/usecase/TrimVideoUseCase.kt`, `domain/usecase/GetVideoDurationUseCase.kt`
-- `docs/video-editing.md`
-- `app/build.gradle.kts` (adds Media3 deps), `app/src/main/res/xml/file_paths.xml`
-- A `VideoRepository` binding added to `di/RepositoryModule.kt` (this merged cleanly
-  with the image-processing binding — nothing was lost).
+### Data / rendering
+- `data/rendering/PipelineRenderer.kt` — folds ops over a bitmap; owns intermediate
+  lifecycle; never recycles the caller's source; returns a distinct bitmap.
+- `data/rendering/GeometryProcessor.kt` — `crop`, `transform`, `resize`.
+- `data/rendering/ColorProcessor.kt` — `filter` (presets) + `adjust` (ColorMatrix).
+- `data/rendering/WatermarkRenderer.kt` — the original Canvas engine, now one processor.
+- `data/repository/ImageProcessingRepositoryImpl.kt`, `data/storage/ImageStorage.kt`
+  (format-aware `writeToCache`/`saveToGallery`).
 
-**Problem:** those `.kt` files each have a stray `</content>` tag appended at the end
-(a tool artifact leaked into the file body), so the module does not compile. Until
-that is fixed, neither feature can build and Phase 0 cannot be compile-verified.
+### Presentation
+- `presentation/editor/EditorTool.kt` — Crop, Transform, Resize, Filters, Adjust,
+  Watermark, Export.
+- `presentation/editor/EditorUiState.kt` — one shared setting per tool + `pipeline`
+  assembly + `canSave`/`hasAnyEdits`/`canUndo`/`canRedo`.
+- `presentation/editor/EditorViewModel.kt` — per-tool events, tag-coalesced undo/redo,
+  reset-all, debounced preview, batch save.
+- `presentation/editor/EditSnapshot.kt` — undo/redo snapshot + `snapshot()`/`restore()`.
+- `presentation/editor/EditorScreen.kt` — tool switcher + per-tool control panels;
+  undo/redo/reset actions; reuses `components/ImageCropper.kt` (shape-less mode for
+  the main photo crop).
 
-**Decision (per user):** pause and wait — do not modify the video files or otherwise
-touch the tree until the concurrency is coordinated.
+### Verification
+`./gradlew :app:compileDebugKotlin :app:testDebugUnitTest` — green.
 
-### Open questions to resolve before resuming
-1. Should the video feature and this image work live on the **same branch**, or be
-   separated (e.g. a dedicated git worktree) to stop the two efforts colliding?
-2. The broken video `.kt` files (stray `</content>`) must be fixed by whoever owns
-   that work before either feature builds.
+> Note: the earlier Phase-0 blocker (an unrelated concurrent video-editing feature
+> with broken `.kt` files in the same tree) was resolved by the user stashing all
+> video changes. No video files are touched by this work.
 
 ---
 
-## Resuming Phase 0 (once unblocked)
-1. Confirm the video files compile (or are removed/isolated).
-2. Run `./gradlew :app:compileDebugKotlin testDebugUnitTest` and confirm green.
-3. Commit Phase 0 on the feature branch.
-4. Proceed to Phase 1 (navigation + editor shell).
+## Possible follow-ups
+- Compress size estimates (needs a background render+encode).
+- Aspect-ratio lock / preset ratios in the crop overlay.
+- Persisting the pipeline as a reusable preset across sessions.

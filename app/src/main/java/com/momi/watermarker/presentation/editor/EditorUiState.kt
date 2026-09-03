@@ -44,6 +44,9 @@ data class EditorUiState(
     val exportOptions: ExportOptions = ExportOptions(),
     val availablePatterns: List<WatermarkPattern> = emptyList(),
     val availableFonts: List<WatermarkFont> = emptyList(),
+    /** Whether there is a prior edit state to undo / redo. */
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
     val isRendering: Boolean = false,
     val isSaving: Boolean = false,
 ) {
@@ -79,6 +82,12 @@ data class EditorUiState(
      * changes like compression have no visible preview, so they don't count here.)
      */
     val hasPreviewableEdits: Boolean get() = pipeline.isNotEmpty
+
+    /** Whether any editing has been done (used to enable a global "reset all"). */
+    val hasAnyEdits: Boolean
+        get() = !crop.isIdentity || !transform.isIdentity || !resize.isIdentity ||
+            !filter.isIdentity || !adjust.isIdentity || config.isRenderable ||
+            exportOptions != ExportOptions()
 
     /**
      * Save is available whenever an image is loaded — even with no edits, since

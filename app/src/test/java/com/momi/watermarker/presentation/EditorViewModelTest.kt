@@ -218,6 +218,28 @@ class EditorViewModelTest {
     }
 
     @Test
+    fun `save with no edits still re-encodes the batch`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
+            Outcome.Success(WatermarkImage("content://wm"))
+        coEvery { processAndSaveImages(any(), any(), any()) } returns
+            BatchSaveResult(savedCount = 1, requested = 1, errors = emptyList())
+
+        val vm = viewModel()
+        vm.onImagesSelected(listOf("content://a"))
+        advanceUntilIdle()
+        // Clear the default watermark text so the pipeline is empty.
+        vm.onTextChanged("")
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.pipeline.isEmpty)
+        assertTrue(vm.uiState.value.canSave)
+
+        vm.onSaveRequested()
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { processAndSaveImages(any(), any(), any()) }
+    }
+
+    @Test
     fun `save with delete requested asks the screen to remove originals`() = runTest {
         coEvery { applyPipeline(any(), any()) } returns
             Outcome.Success(WatermarkImage("content://wm"))
@@ -272,6 +294,79 @@ class EditorViewModelTest {
         advanceUntilIdle()
 
         assertTrue(vm.uiState.value.sourceImages.isEmpty())
+    }
+
+    @Test
+    fun `undo reverts the last edit and redo re-applies it`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
+            Outcome.Success(WatermarkImage("content://wm"))
+
+        val vm = viewModel()
+        vm.onImagesSelected(listOf("content://a"))
+        advanceUntilIdle()
+
+        assertFalse(vm.uiState.value.canUndo)
+
+        vm.onBrightnessChanged(0.5f)
+        advanceUntilIdle()
+        assertEquals(0.5f, vm.uiState.value.adjust.brightness)
+        assertTrue(vm.uiState.value.canUndo)
+
+        vm.onUndo()
+        advanceUntilIdle()
+        assertEquals(0f, vm.uiState.value.adjust.brightness)
+        assertTrue(vm.uiState.value.canRedo)
+
+        vm.onRedo()
+        advanceUntilIdle()
+        assertEquals(0.5f, vm.uiState.value.adjust.brightness)
+    }
+
+    @Test
+    fun `a continuous slider drag collapses into a single undo step`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
+            Outcome.Success(WatermarkImage("content://wm"))
+
+        val vm = viewModel()
+        vm.onImagesSelected(listOf("content://a"))
+        advanceUntilIdle()
+
+        // Simulate a drag: many contrast changes in a row.
+        vm.onContrastChanged(0.2f)
+        vm.onContrastChanged(0.4f)
+        vm.onContrastChanged(0.6f)
+        advanceUntilIdle()
+
+        // A single undo returns all the way to the pre-drag value.
+        vm.onUndo()
+        advanceUntilIdle()
+        assertEquals(0f, vm.uiState.value.adjust.contrast)
+        assertFalse(vm.uiState.value.canUndo)
+    }
+
+    @Test
+    fun `reset all clears every edit and is itself undoable`() = runTest {
+        coEvery { applyPipeline(any(), any()) } returns
+            Outcome.Success(WatermarkImage("content://wm"))
+
+        val vm = viewModel()
+        vm.onImagesSelected(listOf("content://a"))
+        advanceUntilIdle()
+
+        vm.onSaturationChanged(-0.5f)
+        vm.onRotateClockwise()
+        advanceUntilIdle()
+
+        vm.onResetAllEdits()
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.adjust.isIdentity)
+        assertTrue(vm.uiState.value.transform.isIdentity)
+
+        // Undo the reset brings the edits back.
+        vm.onUndo()
+        advanceUntilIdle()
+        assertEquals(-0.5f, vm.uiState.value.adjust.saturation)
+        assertEquals(90, vm.uiState.value.transform.rotationDegrees)
     }
 
     @Test
