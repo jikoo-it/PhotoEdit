@@ -1,0 +1,134 @@
+# Video Editing Suite — Research & Progress
+
+> Living document for the video-editing feature set on `feature/image-processing-suite`.
+> Captures research, decisions, the milestone plan, risks, and a running progress log.
+
+Last updated: 2026-09-03
+
+---
+
+## 1. Goal
+
+Extend MomiWaterMarker from a photo-watermarking app into one that can also edit
+video. Requested features: **cut/trim, crop, merge, transitions, shadow removal**,
+plus whatever else fits. This doc scopes that into achievable milestones and
+records progress.
+
+---
+
+## 2. Research
+
+### 2.1 Engine choice — Media3 `Transformer` vs FFmpeg
+
+| | **Jetpack Media3 `Transformer`** (chosen) | FFmpeg (`ffmpeg-kit` community fork) |
+|---|---|---|
+| Maintenance | Actively maintained by Google (AndroidX) | Upstream `ffmpeg-kit` retired; only community forks |
+| Hardware accel | Yes (MediaCodec) | Software by default; HW is fiddly |
+| APK size | Small (a few hundred KB) | Large (tens of MB per ABI) |
+| Licensing | Apache 2.0 | GPL/LGPL considerations |
+| Trim / crop / scale / rotate / overlay | First-class (`ClippingConfiguration`, `Effect`) | Supported |
+| Concatenate (merge) | `Composition` of `EditedMediaItem`s | `concat` filter |
+| Clip-to-clip **transitions** | **Not built in** — needs custom GL/overlay compositor | `xfade` filter |
+| Per-frame **shadow removal** | N/A (needs ML) | N/A (needs ML) |
+
+**Decision:** Base the suite on **Media3 `Transformer`** (+ `media3-effect` for
+GL effects, `media3-exoplayer` + `media3-ui` for preview). Reach for FFmpeg only
+if a specific need (exotic codec, `xfade`) can't be met natively. This also lets
+us reuse the existing Canvas-based `WatermarkRenderer` as a video `OverlayEffect`.
+
+### 2.2 Feature feasibility
+
+| Feature | Feasibility | Notes |
+|---|---|---|
+| Trim / cut | Easy | `MediaItem.ClippingConfiguration` (start/end ms). |
+| Crop | Easy | `Crop` / `Presentation` effect. Reuses `NormalizedRect`. |
+| Merge | Medium | `Composition` of `EditedMediaItem`s; must reconcile differing resolution/fps. |
+| Transitions | **Hard** | No native clip-to-clip transition API. Custom GL shader/overlay compositor, or FFmpeg `xfade`. Own mini-project. |
+| Shadow removal | **Very hard (ML)** | Not an NLE op — it's deep-learning inpainting. No off-the-shelf Android API. Needs a custom TFLite/MediaPipe model; slow per-frame; quality variable. **Deferred / experimental.** |
+| Video watermark/overlay | Easy–Medium | Port `WatermarkRenderer` output to an `OverlayEffect`. Strong fit for this app. |
+| Audio (mute/volume/fade/replace) | Easy | Media3 audio processors. |
+| Speed / reverse | Easy / Medium | `SpeedChangeEffect`; reverse needs frame buffering. |
+| Rotate / flip | Easy | `ScaleAndRotateTransformation`. |
+| Color/filters/LUT | Medium | GL matrix / custom shader effects. |
+| Frame grab → photo | Easy | `MediaMetadataRetriever` / `ExoPlayer`; ties back to the photo editor. |
+
+### 2.3 Additional feature ideas (backlog)
+
+High value: video watermark/logo overlay, export presets (1080p/720p, per-platform),
+audio mute/replace/fade, speed change, reverse, rotate/flip.
+Medium: filters & color, frame extraction, text/sticker/emoji overlays with timing,
+GIF/boomerang export.
+Later/advanced: background music + auto-ducking, PiP/split-screen, chroma key
+(green screen — more tractable than shadow removal), auto-captions.
+
+---
+
+## 3. Milestone plan
+
+### Milestone 1 — Core video suite (trim → crop → merge → watermark → export)
+
+Coherent first release that leans on the existing architecture.
+
+**Architecture mapping** (mirrors the photo side; dependency rule points inward):
+
+```
+domain/
+  model/      VideoClip (platform-neutral uri + durationMs), VideoExportSettings
+  repository/ VideoRepository (trim, crop, merge, overlay, export, save)
+  usecase/    TrimVideoUseCase, CropVideoUseCase, MergeVideosUseCase,
+              ApplyVideoWatermarkUseCase, GetVideoDurationUseCase, SaveVideoUseCase
+data/
+  video/      VideoTransformer (Media3 Transformer wrapper, suspend + progress)
+  storage/    VideoStorage (cache output files, MediaStore.Video, probe metadata)
+  repository/ VideoRepositoryImpl
+presentation/
+  home/       HomeScreen (choose Photo vs Video)
+  video/      VideoEditorScreen, VideoEditorViewModel, VideoEditorUiState
+```
+
+**Phased delivery:**
+
+- **Phase 0 — Spike (this change):** wire up Media3, trim + export end to end.
+  Proves the engine, threading model, storage, and preview.
+- **Phase 1 — Trim (productionize):** trim range UI polish, export presets, save
+  to gallery, progress + cancel.
+- **Phase 2 — Crop / rotate:** `Presentation`/`Crop` + `ScaleAndRotate` effects;
+  reuse `NormalizedRect` and the existing cropper UX.
+- **Phase 3 — Merge:** multi-clip picking, ordering, resolution/fps reconciliation,
+  `Composition` export.
+- **Phase 4 — Video watermark:** adapt `WatermarkRenderer` → `OverlayEffect`;
+  reuse `WatermarkConfig`.
+
+### Milestone 2 — Motion & audio
+Transitions between merged clips (custom compositor / `xfade`), audio (mute/replace/
+fade/music), speed & reverse, filters/LUTs, frame grab.
+
+### Milestone 3 — Experimental / ML
+Shadow removal (research spike, likely cloud-assisted for photos first), chroma key,
+auto-captions. **Not on a release timeline.**
+
+---
+
+## 4. Risks & open questions
+
+- **Transitions** have no native API — the single biggest effort item in M1's neighborhood; kept in M2.
+- **Shadow removal** is an ML research problem, not an NLE feature — deliberately deferred.
+- **Threading:** `Transformer` must be built/started/cancelled on a thread with a
+  `Looper` (main). Wrapper isolates this.
+- **Codec/resolution mismatches** on merge require a normalization pass.
+- **Large files / long videos:** export time, memory, and cancellation UX matter.
+- **Toolchain is forward-dated** (AGP 9.4, compileSdk 37) — Media3 version pinned in the catalog; bump if resolution fails.
+
+---
+
+## 5. Progress log
+
+- **2026-09-03** — Research complete; engine decision = Media3 Transformer; milestone
+  plan drafted (this doc). Starting Phase 0 spike (trim + export).
+- **2026-09-03** — Phase 0 domain/data/DI layers landed and compiling
+  (`:app:compileDebugKotlin` green). Isolated onto its own worktree/branch
+  `feature/video-editing` (off `main`), fully independent of the image-processing
+  suite: video adds only new files plus additive build config, and its Hilt
+  binding lives in a dedicated `di/VideoModule.kt` so `RepositoryModule.kt` (and
+  all other image-processing files) is never touched. Remaining for the spike:
+  `VideoEditorScreen` + `HomeScreen` + navigation, then a full `assembleDebug`.
