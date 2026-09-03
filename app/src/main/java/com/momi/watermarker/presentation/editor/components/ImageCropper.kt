@@ -9,9 +9,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -86,7 +91,18 @@ fun ImageCropperScreen(
         var cropRect by remember { mutableStateOf<Rect?>(null) }
         var shape by remember { mutableStateOf(CropShape.DEFAULT) }
 
-        Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            // The TopAppBar consumes the status-bar (top) inset itself; here we
+            // pad the sides and bottom so the crop area and shape picker clear
+            // the gesture/navigation bar and any display cutout.
+            modifier = Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(
+                    WindowInsets.safeDrawing.only(
+                        WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                    ),
+                ),
+        ) {
             TopAppBar(
                 // The bar sits on a black Surface, so force a transparent
                 // container and light content — the default surface-colored bar
