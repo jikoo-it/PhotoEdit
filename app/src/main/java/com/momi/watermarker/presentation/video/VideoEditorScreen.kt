@@ -245,26 +245,26 @@ private fun OperationContent(
             }
         }
 
-        // --- Export -----------------------------------------------------------
+        // --- Apply / preview --------------------------------------------------
         Button(
-            onClick = viewModel::onExportRequested,
+            onClick = viewModel::onProcessRequested,
             enabled = uiState.canExport,
             modifier = Modifier.fillMaxWidth(),
         ) {
             if (uiState.isExporting) {
                 CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                Text("  Exporting…")
+                Text("  Processing…")
             } else {
-                Text("${op.title} & save to gallery")
+                Text("Apply ${op.title} & preview")
             }
         }
 
-        // --- Result -----------------------------------------------------------
+        // --- Result: preview, then save --------------------------------------
         val result = uiState.resultClip
         if (result != null) {
             HorizontalDivider()
             Text(
-                "Result — saved to gallery ✓",
+                "Result — preview before saving",
                 style = MaterialTheme.typography.titleMedium,
             )
             VideoPreview(
@@ -275,6 +275,20 @@ private fun OperationContent(
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(16.dp)),
             )
+            Button(
+                onClick = viewModel::onSaveRequested,
+                enabled = !uiState.isSaving && !uiState.isSaved,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                when {
+                    uiState.isSaving -> {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        Text("  Saving…")
+                    }
+                    uiState.isSaved -> Text("Saved to gallery ✓")
+                    else -> Text("Save to gallery")
+                }
+            }
         }
     }
 }

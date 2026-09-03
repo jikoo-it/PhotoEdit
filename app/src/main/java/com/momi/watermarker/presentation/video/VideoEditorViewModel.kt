@@ -97,7 +97,7 @@ class VideoEditorViewModel @Inject constructor(
 
     /** An overlay image was picked. */
     fun onOverlaySelected(uri: String) {
-        _uiState.update { it.copy(overlayUri = uri, resultClip = null) }
+        _uiState.update { it.copy(overlayUri = uri, resultClip = null, isSaved = false) }
     }
 
     // --- Per-op controls ------------------------------------------------------
@@ -107,13 +107,15 @@ class VideoEditorViewModel @Inject constructor(
         if (duration <= 0L) return
         val start = startMs.coerceIn(0L, duration)
         val end = endMs.coerceIn(start, duration)
-        _uiState.update { it.copy(trimStartMs = start, trimEndMs = end) }
+        _uiState.update { it.copy(trimStartMs = start, trimEndMs = end).invalidatingResult() }
     }
 
     fun onAddKeepRange() {
         val duration = _uiState.value.durationMs
         if (duration <= 0L) return
-        _uiState.update { it.copy(keepRanges = it.keepRanges + TrimRange(0L, duration)) }
+        _uiState.update {
+            it.copy(keepRanges = it.keepRanges + TrimRange(0L, duration)).invalidatingResult()
+        }
     }
 
     fun onKeepRangeChanged(index: Int, startMs: Long, endMs: Long) {
@@ -126,22 +128,23 @@ class VideoEditorViewModel @Inject constructor(
                 keepRanges = it.keepRanges.mapIndexed { i, range ->
                     if (i == index) TrimRange(start, end) else range
                 },
-            )
+            ).invalidatingResult()
         }
     }
 
     fun onRemoveKeepRange(index: Int) {
         _uiState.update {
             it.copy(keepRanges = it.keepRanges.filterIndexed { i, _ -> i != index })
+                .invalidatingResult()
         }
     }
 
     fun onAspectRatioSelected(option: AspectRatioOption) {
-        _uiState.update { it.copy(aspectRatio = option) }
+        _uiState.update { it.copy(aspectRatio = option).invalidatingResult() }
     }
 
     fun onOverlayAlphaChanged(alpha: Float) {
-        _uiState.update { it.copy(overlayAlpha = alpha.coerceIn(0f, 1f)) }
+        _uiState.update { it.copy(overlayAlpha = alpha.coerceIn(0f, 1f)).invalidatingResult() }
     }
 
     fun onReorderSource(from: Int, to: Int) {
@@ -150,14 +153,19 @@ class VideoEditorViewModel @Inject constructor(
             if (from in list.indices && to in list.indices) {
                 list.add(to, list.removeAt(from))
             }
-            state.copy(sources = list)
+            state.copy(sources = list).invalidatingResult()
         }
     }
 
+    /** Drops any previewed result so a stale export can't be saved after edits. */
+    private fun VideoEditorUiState.invalidatingResult(): VideoEditorUiState =
+        if (resultClip == null && !isSaved) this
+        else copy(resultClip = null, isSaved = false)
+
     // --- Export ---------------------------------------------------------------
 
-    /** Runs the active operation, then saves the result to the gallery. */
-    fun onExportRequested() {
+    /** Runs the active operation and shows the result for preview (no save yet). */
+    fun onProcessRequested() {
         val state = _uiState.value
         val op = state.op
         if (op == null || !state.canExport) {
@@ -167,7 +175,7 @@ class VideoEditorViewModel @Inject constructor(
         val source = state.primarySource
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true) }
+            _uiState.update { it.copy(isExporting = true, resultClip = null, isSaved = false) }
             val edited: Outcome<VideoClip> = when (op) {
                 VideoOp.TRIM ->
                     trimVideo(source!!, state.trimStartMs, state.trimEndMs)
@@ -185,17 +193,36 @@ class VideoEditorViewModel @Inject constructor(
             when (edited) {
                 is Outcome.Success -> {
                     _uiState.update { it.copy(resultClip = edited.data) }
-                    val name = "MomiVideo_${op.name.lowercase()}_${System.currentTimeMillis()}"
-                    when (val saved = saveVideo(edited.data, name)) {
-                        is Outcome.Success -> emitMessage("${op.title} saved to gallery ✓")
-                        is Outcome.Failure ->
-                            emitMessage("Edited, but save failed: ${saved.error.message}")
-                    }
+                    emitMessage("${op.title} ready — preview below, then save.")
                 }
                 is Outcome.Failure ->
                     emitMessage("${op.title} failed: ${edited.error.message}")
             }
             _uiState.update { it.copy(isExporting = false) }
+        }
+    }
+
+    /** Saves the already-previewed result to the gallery. */
+    fun onSaveRequested() {
+        val state = _uiState.value
+        val result = state.resultClip
+        if (result == null) {
+            emitMessage("Preview the result first.")
+            return
+        }
+        val op = state.op
+        viewModelScope.launch {
+            _uiState.update { it.copy(isSaving = true) }
+            val name = "MomiVideo_${op?.name?.lowercase() ?: "clip"}_${System.currentTimeMillis()}"
+            when (val saved = saveVideo(result, name)) {
+                is Outcome.Success -> {
+                    _uiState.update { it.copy(isSaved = true) }
+                    emitMessage("Saved to gallery ✓")
+                }
+                is Outcome.Failure ->
+                    emitMessage("Save failed: ${saved.error.message}")
+            }
+            _uiState.update { it.copy(isSaving = false) }
         }
     }
 

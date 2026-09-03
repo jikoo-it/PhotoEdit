@@ -49,6 +49,8 @@ data class VideoEditorUiState(
     // Result / progress
     val resultClip: VideoClip? = null,
     val isExporting: Boolean = false,
+    val isSaving: Boolean = false,
+    val isSaved: Boolean = false,
 ) {
     val primarySource: VideoClip? get() = sources.firstOrNull()
     val hasVideo: Boolean get() = sources.isNotEmpty()
