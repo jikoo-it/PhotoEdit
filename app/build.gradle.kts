@@ -77,6 +77,13 @@ dependencies {
     // Coil
     implementation(libs.coil.compose)
 
+    // Media3 (video editing + preview)
+    implementation(libs.androidx.media3.transformer)
+    implementation(libs.androidx.media3.effect)
+    implementation(libs.androidx.media3.common)
+    implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.media3.ui)
+
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 

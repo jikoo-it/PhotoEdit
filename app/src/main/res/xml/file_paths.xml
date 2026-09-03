@@ -5,4 +5,8 @@
     <cache-path
         name="shared_images"
         path="shared_images/" />
+    <!-- Cache subdirectory for exported video results, shared via FileProvider. -->
+    <cache-path
+        name="shared_videos"
+        path="shared_videos/" />
 </paths>
