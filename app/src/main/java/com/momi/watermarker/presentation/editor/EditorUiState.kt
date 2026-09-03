@@ -1,5 +1,7 @@
 package com.momi.watermarker.presentation.editor
 
+import com.momi.watermarker.domain.model.ImageOp
+import com.momi.watermarker.domain.model.Pipeline
 import com.momi.watermarker.domain.model.WatermarkConfig
 import com.momi.watermarker.domain.model.WatermarkFont
 import com.momi.watermarker.domain.model.WatermarkImage
@@ -38,7 +40,20 @@ data class EditorUiState(
     /** Whether a "delete originals" choice should be offered at save time. */
     val canDeleteOriginals: Boolean get() = sourceFromGallery && sourceImages.isNotEmpty()
 
-    val canSave: Boolean get() = hasImage && config.isRenderable && !isSaving && !isRendering
+    /**
+     * The ordered edit pipeline assembled from the current tool settings. Ops are
+     * added in a fixed, sensible order and this same pipeline is applied to every
+     * image in the batch. Today it carries only the watermark; further tools
+     * (crop, resize, filters, ...) contribute their own ops here as they land.
+     */
+    val pipeline: Pipeline
+        get() = Pipeline(
+            buildList {
+                if (config.isRenderable) add(ImageOp.Watermark(config))
+            },
+        )
+
+    val canSave: Boolean get() = hasImage && pipeline.isNotEmpty && !isSaving && !isRendering
 }
 
 /** One-shot side effects the screen must react to (not part of durable state). */

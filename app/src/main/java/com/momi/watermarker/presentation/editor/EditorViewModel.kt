@@ -9,12 +9,12 @@ import com.momi.watermarker.domain.model.WatermarkFont
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.model.WatermarkPattern
 import com.momi.watermarker.domain.model.WatermarkType
-import com.momi.watermarker.domain.usecase.ApplyWatermarkUseCase
+import com.momi.watermarker.domain.usecase.ApplyPipelineUseCase
 import com.momi.watermarker.domain.usecase.BatchSaveResult
 import com.momi.watermarker.domain.usecase.CreateCaptureDestinationUseCase
 import com.momi.watermarker.domain.usecase.CropImageUseCase
 import com.momi.watermarker.domain.usecase.GetWatermarkOptionsUseCase
-import com.momi.watermarker.domain.usecase.SaveWatermarkedImagesUseCase
+import com.momi.watermarker.domain.usecase.ProcessAndSaveImagesUseCase
 import com.momi.watermarker.domain.util.Outcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -35,8 +35,8 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class EditorViewModel @Inject constructor(
-    private val applyWatermark: ApplyWatermarkUseCase,
-    private val saveWatermarkedImages: SaveWatermarkedImagesUseCase,
+    private val applyPipeline: ApplyPipelineUseCase,
+    private val processAndSaveImages: ProcessAndSaveImagesUseCase,
     private val createCaptureDestination: CreateCaptureDestinationUseCase,
     private val cropImage: CropImageUseCase,
     getOptions: GetWatermarkOptionsUseCase,
@@ -210,16 +210,16 @@ class EditorViewModel @Inject constructor(
             emitMessage("Nothing to save yet.")
             return
         }
-        if (!state.config.isRenderable) {
+        if (state.pipeline.isEmpty) {
             emitMessage("Add watermark text or choose a watermark image first.")
             return
         }
-        val config = state.config
+        val pipeline = state.pipeline
         val originals = if (deleteOriginals && state.canDeleteOriginals) sources.map { it.uri } else emptyList()
 
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
-            val result = saveWatermarkedImages(sources, config)
+            val result = processAndSaveImages(sources, pipeline)
             _uiState.update { it.copy(isSaving = false) }
 
             when {
@@ -270,7 +270,7 @@ class EditorViewModel @Inject constructor(
     private fun regeneratePreview() {
         val state = _uiState.value
         val source = state.selectedSource ?: return
-        if (!state.config.isRenderable) {
+        if (state.pipeline.isEmpty) {
             _uiState.update { it.copy(previewImage = null) }
             return
         }
@@ -279,7 +279,7 @@ class EditorViewModel @Inject constructor(
         previewJob = viewModelScope.launch {
             delay(PREVIEW_DEBOUNCE_MS)
             _uiState.update { it.copy(isRendering = true) }
-            when (val result = applyWatermark(source, _uiState.value.config)) {
+            when (val result = applyPipeline(source, _uiState.value.pipeline)) {
                 is Outcome.Success ->
                     _uiState.update { it.copy(previewImage = result.data, isRendering = false) }
                 is Outcome.Failure ->

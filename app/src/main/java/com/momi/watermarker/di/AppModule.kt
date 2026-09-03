@@ -16,5 +16,10 @@ object AppModule {
     @Provides
     @Singleton
     @IoDispatcher
-    fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.Default
+    fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
+
+    @Provides
+    @Singleton
+    @DefaultDispatcher
+    fun provideDefaultDispatcher(): CoroutineDispatcher = Dispatchers.Default
 }
