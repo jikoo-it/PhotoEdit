@@ -3,7 +3,7 @@
 > Living document for the video-editing feature set on `feature/image-processing-suite`.
 > Captures research, decisions, the milestone plan, risks, and a running progress log.
 
-Last updated: 2026-09-03 (multi-op batch)
+Last updated: 2026-09-04 (slideshow + transitions)
 
 ---
 
@@ -135,28 +135,36 @@ building a different request, **not** a new pipeline. Shipped so far:
 | Remove Sound | `EditedMediaItem.setRemoveAudio(true)` | ✅ |
 | Aspect Ratio | `Presentation.createForAspectRatio(r, LAYOUT_SCALE_TO_FIT_WITH_CROP)` | ✅ |
 | Image Overlay | `OverlayEffect` + `BitmapOverlay` w/ `OverlaySettings.alphaScale` | ✅ |
-| Images → video (slideshow) | image `EditedMediaItem` + `setDurationUs`/`setFrameRate` (plumbing in `VideoSegment.isImage`; no UI yet) | ⏳ |
+| Images → video (slideshow) | image `EditedMediaItem` + `setDurationUs`/`setFrameRate`; per-image duration + per-boundary transition (`CreateSlideshowUseCase`) | ✅ |
+| Transitions (per boundary) | composition-wide time-varying effects — see §4b | ✅ (fade/flash/slide/zoom) |
 
 UI: a single `VideoEditorActivity` hosts a home op-picker (`VideoOp`) that routes to a
 per-op flow; state lives in one `VideoEditorViewModel`/`VideoEditorUiState`. `Composition`
 sequence handles differing merge resolutions; `forceAudioTrack` covers differing audio presence.
 
-## 4b. Transitions — the one hard feature (planned, not built)
+## 4b. Transitions — how they're built (shipped, non-overlapping approach)
 
 Media3 1.5.1 has **no clip-to-clip transition API** (confirmed against the shipped jars:
-no crossfade/xfade on `EditedMediaItemSequence` or `Composition`). This applies equally to
-video↔video merges and image↔image slideshows. Approaches, in preference order:
+no crossfade/xfade on `EditedMediaItemSequence` or `Composition`). Rather than block on a
+custom compositor, transitions are rendered by **composition-wide, time-varying effects** that
+need no clip overlap — the effect sees composition-absolute presentation times and we know each
+boundary's absolute timestamp from the clip layout (`buildTransitionEffects` in
+`VideoTransformer`). Each boundary carries its own `VideoTransition`, so every one can differ.
 
-1. **Overlapping-sequence crossfade** — put clips on two `EditedMediaItemSequence`s in one
-   `Composition`, offset in time, and animate opacity at the boundary via a time-varying
-   `OverlayEffect`/alpha `Presentation`. All in-engine; medium-hard.
-2. **Custom GL `Effect`** (`GlShaderProgram`) implementing wipe/fade/slide shaders. Most
-   flexible, most work.
-3. **FFmpeg `xfade`** fallback — only if native routes stall (reintroduces the APK-size /
-   licensing costs we chose Media3 to avoid).
+| Transition | Effect | Interface |
+|---|---|---|
+| Fade | dip RGB toward black over the window | `FadeTransitionsMatrix : RgbMatrix` |
+| Flash | dip toward white (alpha column adds constant; frames are opaque) | `FadeTransitionsMatrix` |
+| Slide | outgoing translates off left, incoming translates in from right (NDC) | `GeometricTransitionsMatrix : MatrixTransformation` |
+| Zoom | outgoing scales to a point at centre, incoming grows back out | `GeometricTransitionsMatrix` |
 
-Slideshow-with-transitions (combine images → video) is folded into this milestone since the
-transition machinery is the shared hard part.
+Each boundary's half-width is clamped to `min(transitionMs, shorter neighbour)` so a short
+image can't be dimmed/moved end-to-end. Slides/zooms reveal the black background (no overlap),
+so they read as *motion through black* rather than a true cross-dissolve.
+
+**Known limitation / future work:** a real **cross-dissolve** (both clips visible at once)
+still needs an overlapping-sequence compositor or a custom `GlShaderProgram` sampling two
+textures; FFmpeg `xfade` remains the last-resort fallback. Tracked, not yet built.
 
 ## 5. Progress log
 
@@ -178,3 +186,14 @@ transition machinery is the shared hard part.
   Compiles clean; installed & verified on Pixel 8 (no crash). Slideshow plumbing added behind
   `VideoSegment.isImage` (no UI). **Transitions** scoped as the next milestone (§4b) — no native
   API, needs a crossfade compositor.
+- **2026-09-04** — **Images → video (slideshow)** shipped with a new `VideoOp.SLIDESHOW`:
+  pick multiple photos, set each image's on-screen duration, and choose a per-boundary
+  transition (every boundary independent) with a shared transition-length slider and an output
+  aspect ratio. New `CreateSlideshowUseCase`; UI uses Coil `AsyncImage` thumbnails +
+  reorder/remove.
+- **2026-09-04** — **Transitions implemented** without waiting on an overlapping compositor
+  (§4b rewritten). Verified `RgbMatrix` and `MatrixTransformation` signatures against the jars,
+  then added `FadeTransitionsMatrix` (fade/flash) and `GeometricTransitionsMatrix` (slide/zoom)
+  as composition-wide effects keyed on absolute boundary times computed in `buildTransitionEffects`.
+  `VideoTransition` = {NONE, FADE, FLASH, SLIDE, ZOOM}; mapped in `VideoRepositoryImpl`. Compiles
+  clean; installed & launches on Pixel 8. True cross-dissolve left as future work.

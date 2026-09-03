@@ -6,6 +6,7 @@ import com.momi.watermarker.data.video.VideoTransformer
 import com.momi.watermarker.di.IoDispatcher
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoEditRequest
+import com.momi.watermarker.domain.model.VideoTransition
 import com.momi.watermarker.domain.repository.VideoRepository
 import com.momi.watermarker.domain.util.Outcome
 import kotlinx.coroutines.CoroutineDispatcher
@@ -50,11 +51,21 @@ class VideoRepositoryImpl @Inject constructor(
                 overlay = overlay,
                 overlayAlpha = request.overlayAlpha,
                 forceAudioTrack = request.forceAudioTrack,
+                transitions = request.transitions.map { it.toKind() },
+                transitionDurationMs = request.transitionDurationMs,
             )
             val outputFile = videoStorage.createOutputFile(prefix = "edit")
             videoTransformer.export(spec, outputFile.absolutePath)
             VideoClip(uri = videoStorage.fileProviderUri(outputFile).toString())
         }
+
+    private fun VideoTransition.toKind(): VideoTransformer.TransitionKind = when (this) {
+        VideoTransition.NONE -> VideoTransformer.TransitionKind.NONE
+        VideoTransition.FADE -> VideoTransformer.TransitionKind.FADE
+        VideoTransition.FLASH -> VideoTransformer.TransitionKind.FLASH
+        VideoTransition.SLIDE -> VideoTransformer.TransitionKind.SLIDE
+        VideoTransition.ZOOM -> VideoTransformer.TransitionKind.ZOOM
+    }
 
     override suspend fun saveToGallery(
         clip: VideoClip,

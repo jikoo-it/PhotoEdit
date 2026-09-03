@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.momi.watermarker.domain.model.TrimRange
 import com.momi.watermarker.domain.model.VideoClip
+import com.momi.watermarker.domain.model.VideoTransition
 import com.momi.watermarker.domain.usecase.ChangeAspectRatioUseCase
+import com.momi.watermarker.domain.usecase.CreateSlideshowUseCase
 import com.momi.watermarker.domain.usecase.CutAndJoinVideoUseCase
 import com.momi.watermarker.domain.usecase.GetVideoDurationUseCase
 import com.momi.watermarker.domain.usecase.MergeVideosUseCase
@@ -36,6 +38,7 @@ class VideoEditorViewModel @Inject constructor(
     private val removeAudio: RemoveAudioUseCase,
     private val changeAspectRatio: ChangeAspectRatioUseCase,
     private val overlayImage: OverlayImageUseCase,
+    private val createSlideshow: CreateSlideshowUseCase,
     private val saveVideo: SaveVideoUseCase,
 ) : ViewModel() {
 
@@ -99,6 +102,72 @@ class VideoEditorViewModel @Inject constructor(
     fun onOverlaySelected(uri: String) {
         _uiState.update { it.copy(overlayUri = uri, resultClip = null, isSaved = false) }
     }
+
+    /** Images were picked for a slideshow, in the order chosen. */
+    fun onSlidesSelected(uris: List<String>) {
+        val slides = uris.map { SlideItem(uri = it) }
+        _uiState.update {
+            it.copy(slides = slides, transitions = defaultTransitions(slides.size))
+                .invalidatingResult()
+        }
+    }
+
+    // --- Slideshow controls ---------------------------------------------------
+
+    fun onSlideDurationChanged(index: Int, durationMs: Long) {
+        _uiState.update { state ->
+            state.copy(
+                slides = state.slides.mapIndexed { i, slide ->
+                    if (i == index) slide.copy(durationMs = durationMs.coerceAtLeast(200L)) else slide
+                },
+            ).invalidatingResult()
+        }
+    }
+
+    fun onSlideTransitionChanged(boundaryIndex: Int, transition: VideoTransition) {
+        _uiState.update { state ->
+            state.copy(
+                transitions = state.transitions.mapIndexed { i, t ->
+                    if (i == boundaryIndex) transition else t
+                },
+            ).invalidatingResult()
+        }
+    }
+
+    fun onTransitionDurationChanged(durationMs: Long) {
+        _uiState.update {
+            it.copy(transitionDurationMs = durationMs.coerceIn(100L, 3_000L)).invalidatingResult()
+        }
+    }
+
+    fun onSlideshowAspectSelected(option: AspectRatioOption) {
+        _uiState.update { it.copy(slideshowAspect = option).invalidatingResult() }
+    }
+
+    fun onReorderSlide(from: Int, to: Int) {
+        _uiState.update { state ->
+            val list = state.slides.toMutableList()
+            if (from in list.indices && to in list.indices) {
+                list.add(to, list.removeAt(from))
+            }
+            // Boundaries change on reorder; reset transitions to the default.
+            state.copy(slides = list, transitions = defaultTransitions(list.size))
+                .invalidatingResult()
+        }
+    }
+
+    fun onRemoveSlide(index: Int) {
+        _uiState.update { state ->
+            val list = state.slides.filterIndexed { i, _ -> i != index }
+            state.copy(slides = list, transitions = defaultTransitions(list.size))
+                .invalidatingResult()
+        }
+    }
+
+    /** A slideshow defaults to a fade between every pair of images. */
+    private fun defaultTransitions(slideCount: Int): List<VideoTransition> =
+        if (slideCount <= 1) emptyList()
+        else List(slideCount - 1) { VideoTransition.FADE }
 
     // --- Per-op controls ------------------------------------------------------
 
@@ -189,6 +258,15 @@ class VideoEditorViewModel @Inject constructor(
                     changeAspectRatio(source!!, state.aspectRatio.ratio!!)
                 VideoOp.OVERLAY ->
                     overlayImage(source!!, state.overlayUri!!, state.overlayAlpha)
+                VideoOp.SLIDESHOW ->
+                    createSlideshow(
+                        frames = state.slides.map {
+                            CreateSlideshowUseCase.Frame(it.uri, it.durationMs)
+                        },
+                        transitions = state.transitions,
+                        transitionDurationMs = state.transitionDurationMs,
+                        aspectRatio = state.slideshowAspect.ratio,
+                    )
             }
             when (edited) {
                 is Outcome.Success -> {

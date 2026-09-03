@@ -26,4 +26,12 @@ data class VideoEditRequest(
      * where some have sound and some don't).
      */
     val forceAudioTrack: Boolean = false,
+    /**
+     * Animation at each internal boundary between segments. When non-empty this
+     * has [segments].size - 1 entries: `transitions[i]` is played between
+     * segment i and segment i + 1. Empty means every boundary is a hard cut.
+     */
+    val transitions: List<VideoTransition> = emptyList(),
+    /** Duration of each non-[VideoTransition.NONE] transition, in milliseconds. */
+    val transitionDurationMs: Long = 0L,
 )

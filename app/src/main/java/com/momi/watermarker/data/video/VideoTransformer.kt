@@ -55,6 +55,9 @@ class VideoTransformer @Inject constructor(
         val imageDurationMs: Long = 3_000L,
     )
 
+    /** The animation played at a boundary between two clips. */
+    enum class TransitionKind { NONE, FADE, FLASH, SLIDE, ZOOM }
+
     /** A full export description: clips to concatenate plus output-wide options. */
     data class ExportSpec(
         val clips: List<Clip>,
@@ -63,6 +66,14 @@ class VideoTransformer @Inject constructor(
         val overlay: Bitmap? = null,
         val overlayAlpha: Float = 1f,
         val forceAudioTrack: Boolean = false,
+        /**
+         * Transition at each internal boundary. When non-empty this has
+         * [clips].size - 1 entries; `transitions[i]` is the boundary between
+         * clip i and clip i + 1.
+         */
+        val transitions: List<TransitionKind> = emptyList(),
+        /** Duration of each non-[TransitionKind.NONE] transition, in milliseconds. */
+        val transitionDurationMs: Long = 0L,
     )
 
     /**
@@ -109,6 +120,11 @@ class VideoTransformer @Inject constructor(
                         BitmapOverlay.createStaticBitmapOverlay(bitmap, settings)
                     videoEffects.add(OverlayEffect(listOf(overlay)))
                 }
+                // Transitions: composition-wide, time-varying effects that
+                // animate each boundary. Added last (colour dips darken the
+                // overlay too). Boundary times are absolute on the composition
+                // timeline, computed from clip durations.
+                videoEffects.addAll(buildTransitionEffects(spec))
                 val effects =
                     if (videoEffects.isEmpty()) Effects.EMPTY
                     else Effects(emptyList(), videoEffects)
@@ -149,6 +165,81 @@ class VideoTransformer @Inject constructor(
                 transformer.start(composition, outputPath)
             }
         }
+    }
+
+    /**
+     * Builds the composition-wide transition effects for [spec] — at most one
+     * colour effect (fade/flash) and one geometric effect (slide/zoom). Walks
+     * the clips accumulating each one's duration to find the absolute timestamp
+     * of every boundary; each half-width is clamped to the shorter neighbouring
+     * clip so a short image can't be transitioned end-to-end.
+     */
+    private fun buildTransitionEffects(spec: ExportSpec): List<Effect> {
+        val transitionUs = spec.transitionDurationMs * 1_000L
+        if (transitionUs <= 0L || spec.transitions.all { it == TransitionKind.NONE }) {
+            return emptyList()
+        }
+
+        val durationsUs = spec.clips.map(::clipDurationUs)
+        // Colour dips (fade/flash).
+        val colorCenters = ArrayList<Long>()
+        val colorHalves = ArrayList<Long>()
+        val colorWhite = ArrayList<Boolean>()
+        // Geometric moves (slide/zoom).
+        val geoCenters = ArrayList<Long>()
+        val geoHalves = ArrayList<Long>()
+        val geoZoom = ArrayList<Boolean>()
+
+        var boundaryUs = 0L
+        for (i in 0 until spec.clips.size - 1) {
+            boundaryUs += durationsUs[i]
+            val kind = spec.transitions.getOrElse(i) { TransitionKind.NONE }
+            if (kind == TransitionKind.NONE) continue
+            if (durationsUs[i] <= 0L || durationsUs[i + 1] <= 0L) continue
+            val half = minOf(transitionUs, durationsUs[i], durationsUs[i + 1])
+            when (kind) {
+                TransitionKind.FADE, TransitionKind.FLASH -> {
+                    colorCenters.add(boundaryUs)
+                    colorHalves.add(half)
+                    colorWhite.add(kind == TransitionKind.FLASH)
+                }
+                TransitionKind.SLIDE, TransitionKind.ZOOM -> {
+                    geoCenters.add(boundaryUs)
+                    geoHalves.add(half)
+                    geoZoom.add(kind == TransitionKind.ZOOM)
+                }
+                TransitionKind.NONE -> Unit
+            }
+        }
+
+        val effects = mutableListOf<Effect>()
+        if (geoCenters.isNotEmpty()) {
+            effects.add(
+                GeometricTransitionsMatrix(
+                    geoCenters.toLongArray(),
+                    geoHalves.toLongArray(),
+                    geoZoom.toBooleanArray(),
+                ),
+            )
+        }
+        if (colorCenters.isNotEmpty()) {
+            effects.add(
+                FadeTransitionsMatrix(
+                    colorCenters.toLongArray(),
+                    colorHalves.toLongArray(),
+                    colorWhite.toBooleanArray(),
+                ),
+            )
+        }
+        return effects
+    }
+
+    /** This clip's on-screen duration in microseconds, or 0 if unknown. */
+    private fun clipDurationUs(clip: Clip): Long = when {
+        clip.isImage -> clip.imageDurationMs * 1_000L
+        clip.startMs != null || clip.endMs != null ->
+            (((clip.endMs ?: 0L) - (clip.startMs ?: 0L)).coerceAtLeast(0L)) * 1_000L
+        else -> 0L
     }
 
     private companion object {

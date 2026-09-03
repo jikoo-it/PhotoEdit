@@ -2,6 +2,7 @@ package com.momi.watermarker.presentation.video
 
 import com.momi.watermarker.domain.model.TrimRange
 import com.momi.watermarker.domain.model.VideoClip
+import com.momi.watermarker.domain.model.VideoTransition
 
 /**
  * The editing operations offered on the video home screen. Each is a distinct,
@@ -14,7 +15,14 @@ enum class VideoOp(val title: String, val subtitle: String) {
     REMOVE_AUDIO("Remove Sound", "Strip the audio track"),
     ASPECT_RATIO("Aspect Ratio", "Reframe to 16:9, 1:1, 9:16…"),
     OVERLAY("Image Overlay", "Stamp a logo or image onto the video"),
+    SLIDESHOW("Images to Video", "Turn photos into a video with per-image timing and transitions"),
 }
+
+/** One image in a slideshow, with how long it stays on screen. */
+data class SlideItem(
+    val uri: String,
+    val durationMs: Long = 3_000L,
+)
 
 /** Selectable output aspect ratios (width / height); [ratio] null keeps the source. */
 enum class AspectRatioOption(val label: String, val ratio: Float?) {
@@ -46,6 +54,12 @@ data class VideoEditorUiState(
     // Overlay
     val overlayUri: String? = null,
     val overlayAlpha: Float = 1f,
+    // Slideshow (images to video)
+    val slides: List<SlideItem> = emptyList(),
+    /** One entry per boundary between adjacent slides (size = slides - 1). */
+    val transitions: List<VideoTransition> = emptyList(),
+    val transitionDurationMs: Long = 600L,
+    val slideshowAspect: AspectRatioOption = AspectRatioOption.WIDE,
     // Result / progress
     val resultClip: VideoClip? = null,
     val isExporting: Boolean = false,
@@ -68,6 +82,7 @@ data class VideoEditorUiState(
             VideoOp.REMOVE_AUDIO -> hasVideo
             VideoOp.ASPECT_RATIO -> hasVideo && aspectRatio.ratio != null
             VideoOp.OVERLAY -> hasVideo && overlayUri != null
+            VideoOp.SLIDESHOW -> slides.size >= 2 && slides.all { it.durationMs > 0L }
             null -> false
         }
 }

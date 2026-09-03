@@ -5,14 +5,17 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -39,10 +42,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.momi.watermarker.domain.model.VideoTransition
 
 /**
  * Root video-editing screen. Shows an operation picker (home) and, once an
@@ -159,43 +165,51 @@ private fun OperationContent(
         ActivityResultContracts.PickVisualMedia(),
     ) { uri -> if (uri != null) viewModel.onOverlaySelected(uri.toString()) }
 
+    val imagesPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(),
+    ) { uris -> if (uris.isNotEmpty()) viewModel.onSlidesSelected(uris.map { it.toString() }) }
+
     Column(
         modifier = modifier
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        VideoPreview(
-            uri = uiState.primarySource?.uri,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(16.dp)),
-            placeholder = when (op) {
-                VideoOp.MERGE -> "Pick videos to merge."
-                else -> "Choose a video to begin."
-            },
-        )
+        // Slideshow works from images, not a source video, so it skips the
+        // video preview + video picker and drives everything from its own list.
+        if (op != VideoOp.SLIDESHOW) {
+            VideoPreview(
+                uri = uiState.primarySource?.uri,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(16.dp)),
+                placeholder = when (op) {
+                    VideoOp.MERGE -> "Pick videos to merge."
+                    else -> "Choose a video to begin."
+                },
+            )
 
-        // --- Source picking ---------------------------------------------------
-        if (op == VideoOp.MERGE) {
-            OutlinedButton(
-                onClick = {
-                    videosPicker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (uiState.hasVideo) "Pick different videos" else "Pick videos") }
-        } else {
-            OutlinedButton(
-                onClick = {
-                    videoPicker.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
-                    )
-                },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (uiState.hasVideo) "Choose a different video" else "Choose a video") }
+            // --- Source picking -----------------------------------------------
+            if (op == VideoOp.MERGE) {
+                OutlinedButton(
+                    onClick = {
+                        videosPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (uiState.hasVideo) "Pick different videos" else "Pick videos") }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        videoPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(if (uiState.hasVideo) "Choose a different video" else "Choose a video") }
+            }
         }
 
         // --- Per-op controls --------------------------------------------------
@@ -243,6 +257,16 @@ private fun OperationContent(
                     onAlphaChange = viewModel::onOverlayAlphaChanged,
                 )
             }
+
+            VideoOp.SLIDESHOW -> SlideshowControls(
+                uiState = uiState,
+                viewModel = viewModel,
+                onPickImages = {
+                    imagesPicker.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                },
+            )
         }
 
         // --- Apply / preview --------------------------------------------------
@@ -403,6 +427,147 @@ private fun AspectRatioControls(
         }
     }
 }
+
+@Composable
+private fun SlideshowControls(
+    uiState: VideoEditorUiState,
+    viewModel: VideoEditorViewModel,
+    onPickImages: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(onClick = onPickImages, modifier = Modifier.fillMaxWidth()) {
+            Text(if (uiState.slides.isEmpty()) "Pick images" else "Pick different images")
+        }
+        if (uiState.slides.isEmpty()) {
+            Text(
+                "Pick two or more photos. Set how long each one shows and the " +
+                    "transition played between them — every transition can differ.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            return@Column
+        }
+
+        AspectRatioControls(
+            selected = uiState.slideshowAspect,
+            onSelect = viewModel::onSlideshowAspectSelected,
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                "Transition length: ${"%.1f".format(uiState.transitionDurationMs / 1000f)}s",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Slider(
+                value = uiState.transitionDurationMs.toFloat(),
+                onValueChange = { viewModel.onTransitionDurationChanged(it.toLong()) },
+                valueRange = 100f..3000f,
+            )
+        }
+
+        HorizontalDivider()
+
+        uiState.slides.forEachIndexed { index, slide ->
+            SlideRow(
+                index = index,
+                slide = slide,
+                slideCount = uiState.slides.size,
+                viewModel = viewModel,
+            )
+            if (index < uiState.slides.lastIndex) {
+                TransitionRow(
+                    selected = uiState.transitions.getOrElse(index) { VideoTransition.NONE },
+                    onSelect = { viewModel.onSlideTransitionChanged(index, it) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SlideRow(
+    index: Int,
+    slide: SlideItem,
+    slideCount: Int,
+    viewModel: VideoEditorViewModel,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            AsyncImage(
+                model = slide.uri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+            Spacer(Modifier.width(12.dp))
+            Text(
+                "Image ${index + 1}",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            TextButton(
+                onClick = { viewModel.onReorderSlide(index, index - 1) },
+                enabled = index > 0,
+            ) { Text("↑") }
+            TextButton(
+                onClick = { viewModel.onReorderSlide(index, index + 1) },
+                enabled = index < slideCount - 1,
+            ) { Text("↓") }
+            if (slideCount > 2) {
+                TextButton(onClick = { viewModel.onRemoveSlide(index) }) { Text("Remove") }
+            }
+        }
+        Text(
+            "Shows for ${"%.1f".format(slide.durationMs / 1000f)}s",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Slider(
+            value = slide.durationMs.toFloat(),
+            onValueChange = { viewModel.onSlideDurationChanged(index, it.toLong()) },
+            valueRange = 500f..10_000f,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransitionRow(
+    selected: VideoTransition,
+    onSelect: (VideoTransition) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "↕ transition to next image",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            VideoTransition.entries.forEach { transition ->
+                FilterChip(
+                    selected = transition == selected,
+                    onClick = { onSelect(transition) },
+                    label = { Text(transition.label) },
+                )
+            }
+        }
+        HorizontalDivider()
+    }
+}
+
+/** Human-readable label for a transition chip. */
+private val VideoTransition.label: String
+    get() = when (this) {
+        VideoTransition.NONE -> "Cut"
+        VideoTransition.FADE -> "Fade"
+        VideoTransition.FLASH -> "Flash"
+        VideoTransition.SLIDE -> "Slide"
+        VideoTransition.ZOOM -> "Zoom"
+    }
 
 @Composable
 private fun OverlayControls(
