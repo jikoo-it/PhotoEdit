@@ -40,12 +40,20 @@ sealed interface ImageOp {
     }
 
     /**
-     * Crops the image to a rectangular region, expressed as fractions of the
-     * source ([NormalizedRect]) so it is resolution-independent.
+     * Crops the image to a region ([rect], fractions of the source so it is
+     * resolution-independent) and optionally masks it to a non-rectangular
+     * [shape] (pixels outside the shape become transparent).
      */
-    data class Crop(val rect: NormalizedRect = NormalizedRect.FULL) : ImageOp {
-        /** True when the crop covers the whole image (nothing is trimmed). */
-        val isIdentity: Boolean get() = rect == NormalizedRect.FULL
+    data class Crop(
+        val rect: NormalizedRect = NormalizedRect.FULL,
+        val shape: CropShape = CropShape.RECTANGLE,
+    ) : ImageOp {
+        /** True only when nothing is trimmed and no shape mask is applied. */
+        val isIdentity: Boolean
+            get() = rect == NormalizedRect.FULL && shape == CropShape.RECTANGLE
+
+        /** Whether the crop introduces transparency (needs an alpha-capable format). */
+        val hasTransparency: Boolean get() = shape != CropShape.RECTANGLE
     }
 
     /** Scales the image down, either by a percentage or to a maximum dimension. */
@@ -102,6 +110,40 @@ sealed interface ImageOp {
     /** Applies a named color preset ([PhotoFilter]) to the whole image. */
     data class Filter(val filter: PhotoFilter = PhotoFilter.NONE) : ImageOp {
         val isIdentity: Boolean get() = filter == PhotoFilter.NONE
+    }
+
+    /**
+     * Mosaic / pixelate effect: replaces each [blockSizePx] × [blockSizePx]
+     * square with its average color. A block of 1px is the identity.
+     */
+    data class Pixelate(val blockSizePx: Int = 1) : ImageOp {
+        init { require(blockSizePx >= 1) { "blockSizePx must be >= 1, was $blockSizePx" } }
+
+        val isIdentity: Boolean get() = blockSizePx <= 1
+    }
+
+    /**
+     * A decorative frame around the image. [widthRatio] is the frame thickness
+     * (or, for [FrameStyle.SHADOW], the padding + blur) as a fraction of the
+     * image's shorter side; [cornerRadiusRatio] is the corner rounding as a
+     * fraction of the shorter side (used by [FrameStyle.ROUNDED]).
+     */
+    data class Frame(
+        val style: FrameStyle = FrameStyle.NONE,
+        val widthRatio: Float = DEFAULT_WIDTH_RATIO,
+        val colorArgb: Int = DEFAULT_COLOR,
+        val cornerRadiusRatio: Float = DEFAULT_CORNER_RADIUS_RATIO,
+    ) : ImageOp {
+        val isIdentity: Boolean get() = style == FrameStyle.NONE
+
+        /** Rounded corners leave the output's true corners transparent. */
+        val hasTransparency: Boolean get() = style == FrameStyle.ROUNDED
+
+        companion object {
+            const val DEFAULT_WIDTH_RATIO = 0.05f
+            const val DEFAULT_COLOR = 0xFFFFFFFF.toInt()
+            const val DEFAULT_CORNER_RADIUS_RATIO = 0.08f
+        }
     }
 
     /** Draws a watermark ([WatermarkConfig]) over the image. */

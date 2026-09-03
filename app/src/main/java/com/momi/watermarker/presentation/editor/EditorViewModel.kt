@@ -2,8 +2,11 @@ package com.momi.watermarker.presentation.editor
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.momi.watermarker.domain.model.CompressionMode
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.ExportFormat
+import com.momi.watermarker.domain.model.ExportOptions
+import com.momi.watermarker.domain.model.FrameStyle
 import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.PhotoFilter
@@ -17,6 +20,8 @@ import com.momi.watermarker.domain.usecase.ApplyPipelineUseCase
 import com.momi.watermarker.domain.usecase.BatchSaveResult
 import com.momi.watermarker.domain.usecase.CreateCaptureDestinationUseCase
 import com.momi.watermarker.domain.usecase.CropImageUseCase
+import com.momi.watermarker.domain.usecase.EstimateExportSizeUseCase
+import com.momi.watermarker.domain.usecase.GetImageInfoUseCase
 import com.momi.watermarker.domain.usecase.GetWatermarkOptionsUseCase
 import com.momi.watermarker.domain.usecase.ProcessAndSaveImagesUseCase
 import com.momi.watermarker.domain.util.Outcome
@@ -43,6 +48,8 @@ class EditorViewModel @Inject constructor(
     private val processAndSaveImages: ProcessAndSaveImagesUseCase,
     private val createCaptureDestination: CreateCaptureDestinationUseCase,
     private val cropImage: CropImageUseCase,
+    private val getImageInfo: GetImageInfoUseCase,
+    private val estimateExportSize: EstimateExportSizeUseCase,
     getOptions: GetWatermarkOptionsUseCase,
 ) : ViewModel() {
 
@@ -59,6 +66,9 @@ class EditorViewModel @Inject constructor(
 
     /** Tracks the in-flight preview render so rapid edits cancel stale work. */
     private var previewJob: Job? = null
+
+    /** Tracks the in-flight export-size estimate so rapid export edits cancel stale work. */
+    private var estimateJob: Job? = null
 
     /** Undo/redo history of edit snapshots (most recent at the end). */
     private val undoStack = ArrayDeque<EditSnapshot>()
@@ -87,6 +97,7 @@ class EditorViewModel @Inject constructor(
                 selectedIndex = if (wasEmpty) 0 else state.selectedIndex,
                 sourceFromGallery = true,
                 previewImage = if (wasEmpty) null else state.previewImage,
+                selectedTool = batchSafeTool(state.selectedTool, merged.size),
             )
         }
         // Only (re)render when the previewed image changed, i.e. a fresh batch.
@@ -118,6 +129,7 @@ class EditorViewModel @Inject constructor(
                 selectedIndex = if (wasEmpty) 0 else state.selectedIndex,
                 sourceFromGallery = if (wasEmpty) false else state.sourceFromGallery,
                 previewImage = if (wasEmpty) null else state.previewImage,
+                selectedTool = batchSafeTool(state.selectedTool, merged.size),
             )
         }
         if (wasEmpty) regeneratePreview()
@@ -138,6 +150,7 @@ class EditorViewModel @Inject constructor(
                     selectedIndex = 0,
                     sourceFromGallery = false,
                     previewImage = null,
+                    selectedImageInfo = null,
                 )
             }
             return
@@ -175,9 +188,16 @@ class EditorViewModel @Inject constructor(
 
     // --- Crop events ---
 
-    /** Stores a rectangular crop (fractions of the source) chosen in the cropper. */
-    fun onCropChanged(rect: NormalizedRect) =
-        updateAndPreview(tag = null) { it.copy(crop = ImageOp.Crop(rect)) }
+    /**
+     * Stores a crop (rectangle + shape) chosen in the cropper. A non-rectangular
+     * shape adds transparency, so the export format is bumped to an alpha-capable
+     * one (PNG) if it was still the default JPEG.
+     */
+    fun onCropChanged(rect: NormalizedRect, shape: CropShape) =
+        updateAndPreview(tag = null) { state ->
+            val next = state.copy(crop = ImageOp.Crop(rect, shape))
+            next.copy(exportOptions = next.alphaSafeExport())
+        }
 
     /** Clears the crop (back to the full image). */
     fun onResetCrop() = updateAndPreview(tag = null) { it.copy(crop = ImageOp.Crop()) }
@@ -229,15 +249,54 @@ class EditorViewModel @Inject constructor(
     /** Clears all fine-grained adjustments. */
     fun onResetAdjust() = updateAdjust(tag = null) { ImageOp.Adjust() }
 
+    // --- Pixelate events ---
+
+    fun onPixelateBlockChanged(blockSizePx: Int) =
+        mutate("pixelate.block") { it.copy(pixelate = ImageOp.Pixelate(blockSizePx.coerceAtLeast(1))) }
+
+    /** Turns the mosaic effect off. */
+    fun onResetPixelate() = mutate(tag = null) { it.copy(pixelate = ImageOp.Pixelate()) }
+
+    // --- Frame events ---
+
+    /** Selects a frame style; a rounded frame adds transparency, so bump to PNG. */
+    fun onFrameStyleSelected(style: FrameStyle) =
+        updateAndPreview(tag = null) { state ->
+            val next = state.copy(frame = state.frame.copy(style = style))
+            next.copy(exportOptions = next.alphaSafeExport())
+        }
+
+    fun onFrameWidthChanged(ratio: Float) =
+        updateFrame("frame.width") { it.copy(widthRatio = ratio.coerceIn(MIN_FRAME_RATIO, MAX_FRAME_RATIO)) }
+
+    fun onFrameColorSelected(colorArgb: Int) = updateFrame(tag = null) { it.copy(colorArgb = colorArgb) }
+
+    fun onFrameCornerRadiusChanged(ratio: Float) =
+        updateFrame("frame.corner") { it.copy(cornerRadiusRatio = ratio.coerceIn(0f, MAX_CORNER_RATIO)) }
+
+    /** Removes the frame. */
+    fun onResetFrame() = updateAndPreview(tag = null) { it.copy(frame = ImageOp.Frame()) }
+
     // --- Export events ---
 
     fun onExportFormatSelected(format: ExportFormat) =
-        mutate(tag = null, preview = false) { it.copy(exportOptions = it.exportOptions.copy(format = format)) }
+        updateExport(tag = null) { it.copy(format = format) }
 
     fun onExportQualityChanged(quality: Int) =
-        mutate("export.quality", preview = false) {
-            it.copy(exportOptions = it.exportOptions.copy(quality = quality.coerceIn(0, 100)))
+        updateExport("export.quality") { it.copy(quality = quality.coerceIn(0, 100)) }
+
+    fun onCompressionModeSelected(mode: CompressionMode) =
+        updateExport(tag = null) { export ->
+            val target = if (mode == CompressionMode.TARGET_SIZE) {
+                export.targetSizeBytes ?: ExportOptions.TARGET_SIZE_PRESETS.first()
+            } else {
+                export.targetSizeBytes
+            }
+            export.copy(mode = mode, targetSizeBytes = target)
         }
+
+    fun onTargetSizeSelected(bytes: Long) =
+        updateExport(tag = null) { it.copy(targetSizeBytes = bytes) }
 
     // --- Watermark configuration events ---
 
@@ -301,7 +360,7 @@ class EditorViewModel @Inject constructor(
         // An empty pipeline is fine — the images are re-encoded per the export
         // options (batch compression / format conversion with no other edits).
         val pipeline = state.pipeline
-        val export = state.exportOptions
+        val export = state.alphaSafeExport()
         val originals = if (deleteOriginals && state.canDeleteOriginals) sources.map { it.uri } else emptyList()
 
         viewModelScope.launch {
@@ -331,6 +390,7 @@ class EditorViewModel @Inject constructor(
                     selectedIndex = 0,
                     sourceFromGallery = false,
                     previewImage = null,
+                    selectedImageInfo = null,
                 )
             }
             emitMessage("Saved and removed originals ✓")
@@ -357,8 +417,29 @@ class EditorViewModel @Inject constructor(
     private fun updateAdjust(tag: String?, reduce: (ImageOp.Adjust) -> ImageOp.Adjust) =
         mutate(tag) { it.copy(adjust = reduce(it.adjust)) }
 
+    private fun updateFrame(tag: String?, reduce: (ImageOp.Frame) -> ImageOp.Frame) =
+        mutate(tag) { it.copy(frame = reduce(it.frame)) }
+
+    /** Applies an export-options change (no visible preview) and refreshes the size estimate. */
+    private fun updateExport(tag: String?, reduce: (ExportOptions) -> ExportOptions) {
+        mutate(tag, preview = false) { it.copy(exportOptions = reduce(it.exportOptions)) }
+        refreshExportEstimate()
+    }
+
     private fun updateAndPreview(tag: String?, reduce: (EditorUiState) -> EditorUiState) =
         mutate(tag = tag, reduce = reduce)
+
+    /** The current tool, swapped to the default if it isn't allowed for [imageCount] images. */
+    private fun batchSafeTool(current: EditorTool, imageCount: Int): EditorTool =
+        if (imageCount > 1 && !current.supportsBatch) EditorTool.DEFAULT else current
+
+    /** Bumps a JPEG export to PNG when the pipeline would produce transparency. */
+    private fun EditorUiState.alphaSafeExport(): ExportOptions =
+        if (producesTransparency && exportOptions.format == ExportFormat.JPEG) {
+            exportOptions.copy(format = ExportFormat.PNG)
+        } else {
+            exportOptions
+        }
 
     // --- Edit history (undo/redo) ---
 
@@ -432,6 +513,8 @@ class EditorViewModel @Inject constructor(
         val source = state.selectedSource ?: return
         if (state.pipeline.isEmpty) {
             _uiState.update { it.copy(previewImage = null) }
+            refreshShownImageInfo()
+            refreshExportEstimate()
             return
         }
 
@@ -439,12 +522,73 @@ class EditorViewModel @Inject constructor(
         previewJob = viewModelScope.launch {
             delay(PREVIEW_DEBOUNCE_MS)
             _uiState.update { it.copy(isRendering = true) }
-            when (val result = applyPipeline(source, _uiState.value.pipeline)) {
+            // A shaped crop introduces transparency, so render the preview in an
+            // alpha-capable format; otherwise a fast JPEG is fine.
+            val previewExport = if (_uiState.value.producesTransparency) {
+                ExportOptions(format = ExportFormat.PNG)
+            } else {
+                ExportOptions()
+            }
+            when (val result = applyPipeline(source, _uiState.value.pipeline, previewExport)) {
                 is Outcome.Success ->
                     _uiState.update { it.copy(previewImage = result.data, isRendering = false) }
                 is Outcome.Failure ->
                     _uiState.update { it.copy(isRendering = false) }
                         .also { emitMessage("Preview failed: ${result.error.message}") }
+            }
+            refreshShownImageInfo()
+            refreshExportEstimate()
+        }
+    }
+
+    /**
+     * Estimates the export size of the shown image (rendered preview when present,
+     * otherwise the source) under the current export options, debounced. Stale
+     * results are dropped if the shown image or export options change meanwhile.
+     */
+    private fun refreshExportEstimate() {
+        val state = _uiState.value
+        val shown = state.previewImage ?: state.selectedSource
+        if (shown == null) {
+            _uiState.update { it.copy(estimatedExportSize = null) }
+            return
+        }
+        val export = state.exportOptions
+        estimateJob?.cancel()
+        estimateJob = viewModelScope.launch {
+            delay(ESTIMATE_DEBOUNCE_MS)
+            when (val result = estimateExportSize(shown, export)) {
+                is Outcome.Success -> _uiState.update {
+                    val current = it.previewImage ?: it.selectedSource
+                    if (current?.uri == shown.uri && it.exportOptions == export) {
+                        it.copy(estimatedExportSize = result.data)
+                    } else {
+                        it
+                    }
+                }
+                is Outcome.Failure -> Unit
+            }
+        }
+    }
+
+    /**
+     * Reads the dimensions/size of the image currently shown (the rendered
+     * preview when present, otherwise the selected source) and publishes it.
+     * Stale results are dropped if the shown image changes meanwhile.
+     */
+    private fun refreshShownImageInfo() {
+        val shown = _uiState.value.let { it.previewImage ?: it.selectedSource }
+        if (shown == null) {
+            _uiState.update { it.copy(selectedImageInfo = null) }
+            return
+        }
+        viewModelScope.launch {
+            when (val result = getImageInfo(shown)) {
+                is Outcome.Success -> _uiState.update { state ->
+                    val current = state.previewImage ?: state.selectedSource
+                    if (current?.uri == shown.uri) state.copy(selectedImageInfo = result.data) else state
+                }
+                is Outcome.Failure -> Unit
             }
         }
     }
@@ -455,9 +599,13 @@ class EditorViewModel @Inject constructor(
 
     private companion object {
         const val PREVIEW_DEBOUNCE_MS = 250L
+        const val ESTIMATE_DEBOUNCE_MS = 300L
         const val MIN_IMAGE_RATIO = 0.05f
         const val MAX_IMAGE_RATIO = 0.8f
         const val MAX_SPACING_RATIO = 3f
+        const val MIN_FRAME_RATIO = 0.01f
+        const val MAX_FRAME_RATIO = 0.25f
+        const val MAX_CORNER_RATIO = 0.5f
         const val MAX_HISTORY = 50
     }
 }

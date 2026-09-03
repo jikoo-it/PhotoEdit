@@ -18,12 +18,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,6 +88,15 @@ fun ImageCropperScreen(
 
         Column(modifier = Modifier.fillMaxSize()) {
             TopAppBar(
+                // The bar sits on a black Surface, so force a transparent
+                // container and light content — the default surface-colored bar
+                // would render white-on-white in a light theme.
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White,
+                ),
                 title = { Text(title, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
@@ -234,6 +245,17 @@ private fun ShapeSelector(selected: CropShape, onSelect: (CropShape) -> Unit) {
                 selected = option == selected,
                 onClick = { onSelect(option) },
                 label = { Text(option.displayName) },
+                // Readable on the black crop surface.
+                colors = FilterChipDefaults.filterChipColors(
+                    labelColor = Color.White,
+                    selectedContainerColor = Color.White,
+                    selectedLabelColor = Color.Black,
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = option == selected,
+                    borderColor = Color.White.copy(alpha = 0.6f),
+                ),
             )
         }
     }

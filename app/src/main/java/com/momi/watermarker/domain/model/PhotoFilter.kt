@@ -8,13 +8,21 @@ package com.momi.watermarker.domain.model
  */
 enum class PhotoFilter(val label: String) {
     NONE("Original"),
+    // Tonal presets.
     MONO("Mono"),
     SEPIA("Sepia"),
     NOIR("Noir"),
     VIVID("Vivid"),
     COOL("Cool"),
     WARM("Warm"),
-    VINTAGE("Vintage");
+    VINTAGE("Vintage"),
+    // Color-tint presets (a colored wash over the image).
+    RED("Red"),
+    ORANGE("Orange"),
+    GREEN("Green"),
+    TEAL("Teal"),
+    BLUE("Blue"),
+    VIOLET("Violet");
 
     companion object {
         val DEFAULT = NONE

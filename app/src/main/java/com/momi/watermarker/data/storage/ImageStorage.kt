@@ -4,21 +4,18 @@ import android.content.ContentValues
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.Matrix
-import android.graphics.Paint
-import android.graphics.Path
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 import android.media.ExifInterface
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
+import com.momi.watermarker.data.rendering.maskToShape
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.ExportFormat
+import com.momi.watermarker.domain.model.ExportOptions
+import com.momi.watermarker.domain.model.ImageInfo
 import com.momi.watermarker.domain.model.NormalizedRect
-import com.momi.watermarker.domain.model.squircleUnitPoints
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileOutputStream
@@ -55,6 +52,32 @@ class ImageStorage @Inject constructor(
     }
 
     /**
+     * Reads [uri]'s pixel dimensions (bounds-only decode, no full bitmap) and
+     * encoded byte size. Dimensions are swapped when EXIF marks the image as
+     * rotated 90°/270°, so they match what [decodeBitmap] produces.
+     */
+    fun readImageInfo(uri: Uri): ImageInfo {
+        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "Cannot open input stream for $uri" }
+            BitmapFactory.decodeStream(input, null, options)
+        }
+        check(options.outWidth > 0 && options.outHeight > 0) { "Couldn't read image bounds for $uri" }
+
+        val swapAxes = readExifRotation(uri).let { it == 90f || it == 270f }
+        val width = if (swapAxes) options.outHeight else options.outWidth
+        val height = if (swapAxes) options.outWidth else options.outHeight
+        return ImageInfo(width = width, height = height, sizeBytes = readByteSize(uri))
+    }
+
+    /** Best-effort encoded size of [uri] in bytes, or null if unavailable. */
+    private fun readByteSize(uri: Uri): Long? = runCatching {
+        context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { fd ->
+            fd.length.takeIf { it >= 0 }
+        }
+    }.getOrNull()
+
+    /**
      * Compresses [bitmap] into the shared cache directory and returns a
      * `content://` URI exported via [FileProvider]. Use [Bitmap.CompressFormat.PNG]
      * to preserve transparency (e.g. for logo watermarks).
@@ -75,20 +98,59 @@ class ImageStorage @Inject constructor(
     }
 
     /**
-     * Compresses [bitmap] into the shared cache using [format] at [quality]
-     * (0..100; ignored for formats without a quality setting) and returns a
-     * `content://` URI. The file carries [format]'s extension so downstream
-     * consumers (and the gallery export) get the right type.
+     * Encodes [bitmap] into the shared cache per [export] (format + compression
+     * mode) and returns a `content://` URI. The file carries the format's
+     * extension so downstream consumers (and the gallery export) get the right
+     * type. In [CompressionMode.TARGET_SIZE] the quality is chosen to fit the
+     * size budget.
      */
-    fun writeToCache(bitmap: Bitmap, prefix: String, format: ExportFormat, quality: Int): Uri {
+    fun writeToCache(bitmap: Bitmap, prefix: String, export: ExportOptions): Uri {
         val dir = File(context.cacheDir, SHARED_DIR).apply { mkdirs() }
-        val file = File(dir, "${prefix}_${System.currentTimeMillis()}.${format.extension}")
-        val effectiveQuality = if (format.supportsQuality) quality else 100
-        FileOutputStream(file).use { out ->
-            bitmap.compress(format.toCompressFormat(), effectiveQuality, out)
-        }
+        val file = File(dir, "${prefix}_${System.currentTimeMillis()}.${export.format.extension}")
+        val bytes = encodeToBytes(bitmap, export)
+        FileOutputStream(file).use { out -> out.write(bytes) }
         return fileProviderUri(file)
     }
+
+    /** The number of bytes [bitmap] would occupy when encoded per [export]. */
+    fun measureEncodedSize(bitmap: Bitmap, export: ExportOptions): Long =
+        encodeToBytes(bitmap, export).size.toLong()
+
+    /**
+     * Encodes [bitmap] to a byte array per [export]. For a fixed quality this is
+     * a single compress; for a size target it binary-searches quality for the
+     * largest that fits the budget (falling back to the lowest quality if none
+     * do).
+     */
+    private fun encodeToBytes(bitmap: Bitmap, export: ExportOptions): ByteArray {
+        val format = export.format.toCompressFormat()
+        if (!export.usesTargetSize) {
+            return compress(bitmap, format, export.effectiveQuality)
+        }
+
+        val target = export.targetSizeBytes ?: return compress(bitmap, format, export.effectiveQuality)
+        var low = MIN_TARGET_QUALITY
+        var high = 100
+        var best: ByteArray? = null
+        while (low <= high) {
+            val mid = (low + high) / 2
+            val encoded = compress(bitmap, format, mid)
+            if (encoded.size <= target) {
+                best = encoded
+                low = mid + 1
+            } else {
+                high = mid - 1
+            }
+        }
+        // If even the lowest quality overshoots, keep that smallest result.
+        return best ?: compress(bitmap, format, MIN_TARGET_QUALITY)
+    }
+
+    private fun compress(bitmap: Bitmap, format: Bitmap.CompressFormat, quality: Int): ByteArray =
+        java.io.ByteArrayOutputStream().use { out ->
+            bitmap.compress(format, quality, out)
+            out.toByteArray()
+        }
 
     private fun ExportFormat.toCompressFormat(): Bitmap.CompressFormat = when (this) {
         ExportFormat.JPEG -> Bitmap.CompressFormat.JPEG
@@ -113,7 +175,7 @@ class ImageStorage @Inject constructor(
             val cropWidth = (rect.width * w).roundToInt().coerceIn(1, w - x)
             val cropHeight = (rect.height * h).roundToInt().coerceIn(1, h - y)
             val cropped = Bitmap.createBitmap(bitmap, x, y, cropWidth, cropHeight)
-            val shaped = applyShapeMask(cropped, shape)
+            val shaped = maskToShape(cropped, shape)
             return try {
                 writeToCache(shaped, prefix = "watermark_src", format = Bitmap.CompressFormat.PNG)
             } finally {
@@ -122,45 +184,6 @@ class ImageStorage @Inject constructor(
             }
         } finally {
             bitmap.recycle()
-        }
-    }
-
-    /**
-     * Returns [src] masked to [shape]: the shape is drawn opaque, then the source
-     * is composited only where the shape covers it (`SRC_IN`), leaving everything
-     * outside the shape transparent. [CropShape.RECTANGLE] needs no mask and is
-     * returned unchanged.
-     */
-    private fun applyShapeMask(src: Bitmap, shape: CropShape): Bitmap {
-        if (shape == CropShape.RECTANGLE) return src
-        val w = src.width
-        val h = src.height
-        val output = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(output)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        canvas.drawPath(shapePath(shape, w.toFloat(), h.toFloat()), paint)
-        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-        canvas.drawBitmap(src, 0f, 0f, paint)
-        return output
-    }
-
-    /** The [shape] outline filling the `w`×`h` box. */
-    private fun shapePath(shape: CropShape, w: Float, h: Float): Path = Path().apply {
-        when (shape) {
-            CropShape.RECTANGLE -> addRect(0f, 0f, w, h, Path.Direction.CW)
-            CropShape.CIRCLE -> addOval(0f, 0f, w, h, Path.Direction.CW)
-            CropShape.ROUNDED -> {
-                val r = minOf(w, h) * CropShape.ROUNDED_CORNER_FRACTION
-                addRoundRect(0f, 0f, w, h, r, r, Path.Direction.CW)
-            }
-            CropShape.SQUIRCLE -> {
-                squircleUnitPoints().forEachIndexed { i, (ux, uy) ->
-                    val px = ux * w
-                    val py = uy * h
-                    if (i == 0) moveTo(px, py) else lineTo(px, py)
-                }
-                close()
-            }
         }
     }
 
@@ -229,5 +252,6 @@ class ImageStorage @Inject constructor(
     private companion object {
         const val SHARED_DIR = "shared_images"
         const val JPEG_QUALITY = 95
+        const val MIN_TARGET_QUALITY = 5
     }
 }

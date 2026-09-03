@@ -138,6 +138,28 @@ class ColorProcessor @Inject constructor() {
                 ),
             )
         }
+        // Color-tint washes: partially desaturate, then scale channels toward the hue.
+        PhotoFilter.RED -> tint(1.25f, 0.7f, 0.7f)
+        PhotoFilter.ORANGE -> tint(1.25f, 0.95f, 0.6f)
+        PhotoFilter.GREEN -> tint(0.7f, 1.2f, 0.7f)
+        PhotoFilter.TEAL -> tint(0.65f, 1.1f, 1.1f)
+        PhotoFilter.BLUE -> tint(0.7f, 0.85f, 1.3f)
+        PhotoFilter.VIOLET -> tint(1.05f, 0.7f, 1.25f)
+    }
+
+    /** A color-tint matrix: keeps some detail (partial desaturation) then pushes RGB toward the hue. */
+    private fun tint(r: Float, g: Float, b: Float): ColorMatrix = ColorMatrix().apply {
+        setSaturation(0.35f)
+        postConcat(
+            ColorMatrix(
+                floatArrayOf(
+                    r, 0f, 0f, 0f, 0f,
+                    0f, g, 0f, 0f, 0f,
+                    0f, 0f, b, 0f, 0f,
+                    0f, 0f, 0f, 1f, 0f,
+                ),
+            ),
+        )
     }
 
     private companion object {

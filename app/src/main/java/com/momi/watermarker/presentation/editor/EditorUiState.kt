@@ -1,6 +1,7 @@
 package com.momi.watermarker.presentation.editor
 
 import com.momi.watermarker.domain.model.ExportOptions
+import com.momi.watermarker.domain.model.ImageInfo
 import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.Pipeline
 import com.momi.watermarker.domain.model.WatermarkConfig
@@ -29,6 +30,11 @@ data class EditorUiState(
     val sourceFromGallery: Boolean = false,
     /** The rendered, watermarked preview of the selected source image. */
     val previewImage: WatermarkImage? = null,
+    /**
+     * Dimensions/size of the image currently shown in the preview (the rendered
+     * [previewImage] when present, otherwise the selected source). Null until read.
+     */
+    val selectedImageInfo: ImageInfo? = null,
     val config: WatermarkConfig = WatermarkConfig(text = "© MomiWaterMarker"),
     /** Rectangular crop contributed by the Crop tool. */
     val crop: ImageOp.Crop = ImageOp.Crop(),
@@ -40,8 +46,14 @@ data class EditorUiState(
     val filter: ImageOp.Filter = ImageOp.Filter(),
     /** Fine-grained color adjustments contributed by the Adjust tool. */
     val adjust: ImageOp.Adjust = ImageOp.Adjust(),
+    /** Mosaic/pixelate effect contributed by the Pixelate tool. */
+    val pixelate: ImageOp.Pixelate = ImageOp.Pixelate(),
+    /** Decorative frame contributed by the Frame tool. */
+    val frame: ImageOp.Frame = ImageOp.Frame(),
     /** Encoding (format + quality) applied at export by the Compress tool. */
     val exportOptions: ExportOptions = ExportOptions(),
+    /** Estimated size (bytes) of the shown image re-encoded per [exportOptions]. */
+    val estimatedExportSize: Long? = null,
     val availablePatterns: List<WatermarkPattern> = emptyList(),
     val availableFonts: List<WatermarkFont> = emptyList(),
     /** Whether there is a prior edit state to undo / redo. */
@@ -73,9 +85,25 @@ data class EditorUiState(
                 if (!resize.isIdentity) add(resize)
                 if (!filter.isIdentity) add(filter)
                 if (!adjust.isIdentity) add(adjust)
+                if (!pixelate.isIdentity) add(pixelate)
                 if (config.isRenderable) add(ImageOp.Watermark(config))
+                // The frame is outermost, wrapping the finished (watermarked) photo.
+                if (!frame.isIdentity) add(frame)
             },
         )
+
+    /**
+     * Whether the assembled pipeline yields pixels with transparency (a shaped
+     * crop or a rounded frame), which requires an alpha-capable export format.
+     */
+    val producesTransparency: Boolean get() = crop.hasTransparency || frame.hasTransparency
+
+    /**
+     * The tools available for the current batch: single-image-only tools (see
+     * [EditorTool.supportsBatch]) are hidden while multiple images are selected.
+     */
+    val visibleTools: List<EditorTool>
+        get() = EditorTool.entries.filter { !hasMultipleImages || it.supportsBatch }
 
     /**
      * Whether there is any edit to preview: a non-empty pipeline. (Export-only
@@ -86,8 +114,8 @@ data class EditorUiState(
     /** Whether any editing has been done (used to enable a global "reset all"). */
     val hasAnyEdits: Boolean
         get() = !crop.isIdentity || !transform.isIdentity || !resize.isIdentity ||
-            !filter.isIdentity || !adjust.isIdentity || config.isRenderable ||
-            exportOptions != ExportOptions()
+            !filter.isIdentity || !adjust.isIdentity || !pixelate.isIdentity ||
+            !frame.isIdentity || config.isRenderable || exportOptions != ExportOptions()
 
     /**
      * Save is available whenever an image is loaded — even with no edits, since
