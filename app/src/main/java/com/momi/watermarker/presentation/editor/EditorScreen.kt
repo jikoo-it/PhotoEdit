@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BrandingWatermark
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Crop
+import androidx.compose.material.icons.filled.FilterVintage
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PhotoCamera
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PhotoSizeSelectLarge
 import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -77,6 +79,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
 import com.momi.watermarker.domain.model.ExportFormat
+import com.momi.watermarker.domain.model.PhotoFilter
 import com.momi.watermarker.domain.model.ResizeMode
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.model.WatermarkPattern
@@ -241,6 +244,14 @@ fun EditorScreen(
                             viewModel = viewModel,
                         )
                         EditorTool.RESIZE -> ResizeControls(
+                            state = uiState,
+                            viewModel = viewModel,
+                        )
+                        EditorTool.FILTER -> FilterControls(
+                            state = uiState,
+                            viewModel = viewModel,
+                        )
+                        EditorTool.ADJUST -> AdjustControls(
                             state = uiState,
                             viewModel = viewModel,
                         )
@@ -681,6 +692,59 @@ private fun ExportControls(
     }
 }
 
+@Composable
+private fun FilterControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ControlLabel("Filter")
+        OptionChipRow(
+            options = PhotoFilter.entries,
+            selected = state.filter.filter,
+            labelOf = { it.label },
+            onSelected = viewModel::onFilterSelected,
+        )
+    }
+}
+
+@Composable
+private fun AdjustControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+) {
+    val adjust = state.adjust
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        SignedSlider("Brightness", adjust.brightness, viewModel::onBrightnessChanged)
+        SignedSlider("Contrast", adjust.contrast, viewModel::onContrastChanged)
+        SignedSlider("Saturation", adjust.saturation, viewModel::onSaturationChanged)
+        SignedSlider("Warmth", adjust.warmth, viewModel::onWarmthChanged)
+
+        if (!adjust.isIdentity) {
+            TextButton(onClick = viewModel::onResetAdjust) { Text("Reset adjustments") }
+        }
+    }
+}
+
+/** A slider for a bipolar `-1f..1f` adjustment, labeled with a signed percentage. */
+@Composable
+private fun SignedSlider(
+    label: String,
+    value: Float,
+    onValueChange: (Float) -> Unit,
+) {
+    val percent = (value * 100).toInt()
+    Column {
+        ControlLabel("$label: ${if (percent > 0) "+$percent" else "$percent"}")
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = -1f..1f,
+        )
+    }
+}
+
 /** A horizontally-scrolling row of editing tools; the selected one is highlighted. */
 @Composable
 private fun ToolSwitcher(
@@ -723,6 +787,8 @@ private val EditorTool.icon
     get() = when (this) {
         EditorTool.TRANSFORM -> Icons.Filled.Crop
         EditorTool.RESIZE -> Icons.Filled.PhotoSizeSelectLarge
+        EditorTool.FILTER -> Icons.Filled.FilterVintage
+        EditorTool.ADJUST -> Icons.Filled.Tune
         EditorTool.WATERMARK -> Icons.Filled.BrandingWatermark
         EditorTool.EXPORT -> Icons.Filled.Save
     }

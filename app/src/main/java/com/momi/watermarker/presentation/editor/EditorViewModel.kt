@@ -6,6 +6,7 @@ import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.ExportFormat
 import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.NormalizedRect
+import com.momi.watermarker.domain.model.PhotoFilter
 import com.momi.watermarker.domain.model.ResizeMode
 import com.momi.watermarker.domain.model.WatermarkConfig
 import com.momi.watermarker.domain.model.WatermarkFont
@@ -187,6 +188,24 @@ class EditorViewModel @Inject constructor(
     /** Clears any downscaling (back to full size). */
     fun onResetResize() = updateResize { ImageOp.Resize() }
 
+    // --- Filter events ---
+
+    fun onFilterSelected(filter: PhotoFilter) =
+        updateAndPreview { it.copy(filter = ImageOp.Filter(filter)) }
+
+    // --- Adjustment events ---
+
+    fun onBrightnessChanged(value: Float) = updateAdjust { it.copy(brightness = value.coerceIn(-1f, 1f)) }
+
+    fun onContrastChanged(value: Float) = updateAdjust { it.copy(contrast = value.coerceIn(-1f, 1f)) }
+
+    fun onSaturationChanged(value: Float) = updateAdjust { it.copy(saturation = value.coerceIn(-1f, 1f)) }
+
+    fun onWarmthChanged(value: Float) = updateAdjust { it.copy(warmth = value.coerceIn(-1f, 1f)) }
+
+    /** Clears all fine-grained adjustments. */
+    fun onResetAdjust() = updateAdjust { ImageOp.Adjust() }
+
     // --- Export events ---
 
     fun onExportFormatSelected(format: ExportFormat) =
@@ -313,6 +332,16 @@ class EditorViewModel @Inject constructor(
 
     private fun updateResize(reduce: (ImageOp.Resize) -> ImageOp.Resize) {
         _uiState.update { it.copy(resize = reduce(it.resize)) }
+        regeneratePreview()
+    }
+
+    private fun updateAdjust(reduce: (ImageOp.Adjust) -> ImageOp.Adjust) {
+        _uiState.update { it.copy(adjust = reduce(it.adjust)) }
+        regeneratePreview()
+    }
+
+    private fun updateAndPreview(reduce: (EditorUiState) -> EditorUiState) {
+        _uiState.update(reduce)
         regeneratePreview()
     }
 

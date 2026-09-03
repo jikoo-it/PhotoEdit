@@ -11,6 +11,8 @@ package com.momi.watermarker.presentation.editor
 enum class EditorTool(val label: String) {
     TRANSFORM("Transform"),
     RESIZE("Resize"),
+    FILTER("Filters"),
+    ADJUST("Adjust"),
     WATERMARK("Watermark"),
     EXPORT("Export");
 

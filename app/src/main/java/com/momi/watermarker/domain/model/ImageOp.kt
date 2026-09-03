@@ -64,6 +64,37 @@ sealed interface ImageOp {
         }
     }
 
+    /**
+     * Fine-grained color adjustments, each normalized to `-1f..1f` where `0f`
+     * leaves that channel untouched (positive brightens/increases, negative
+     * darkens/decreases). Applied as a single combined `ColorMatrix`.
+     */
+    data class Adjust(
+        val brightness: Float = 0f,
+        val contrast: Float = 0f,
+        val saturation: Float = 0f,
+        val warmth: Float = 0f,
+    ) : ImageOp {
+        init {
+            require(brightness in RANGE) { "brightness must be within $RANGE, was $brightness" }
+            require(contrast in RANGE) { "contrast must be within $RANGE, was $contrast" }
+            require(saturation in RANGE) { "saturation must be within $RANGE, was $saturation" }
+            require(warmth in RANGE) { "warmth must be within $RANGE, was $warmth" }
+        }
+
+        val isIdentity: Boolean
+            get() = brightness == 0f && contrast == 0f && saturation == 0f && warmth == 0f
+
+        companion object {
+            val RANGE = -1f..1f
+        }
+    }
+
+    /** Applies a named color preset ([PhotoFilter]) to the whole image. */
+    data class Filter(val filter: PhotoFilter = PhotoFilter.NONE) : ImageOp {
+        val isIdentity: Boolean get() = filter == PhotoFilter.NONE
+    }
+
     /** Draws a watermark ([WatermarkConfig]) over the image. */
     data class Watermark(val config: WatermarkConfig) : ImageOp
 }

@@ -20,6 +20,7 @@ import javax.inject.Singleton
 class PipelineRenderer @Inject constructor(
     private val watermarkRenderer: WatermarkRenderer,
     private val geometryProcessor: GeometryProcessor,
+    private val colorProcessor: ColorProcessor,
 ) {
 
     /**
@@ -57,6 +58,8 @@ class PipelineRenderer @Inject constructor(
     ): Bitmap = when (op) {
         is ImageOp.Transform -> geometryProcessor.transform(source, op)
         is ImageOp.Resize -> geometryProcessor.resize(source, op)
+        is ImageOp.Filter -> colorProcessor.filter(source, op)
+        is ImageOp.Adjust -> colorProcessor.adjust(source, op)
         is ImageOp.Watermark -> {
             val watermarkBitmap = op.config.imageUri
                 ?.takeIf { op.config.type == WatermarkType.IMAGE }

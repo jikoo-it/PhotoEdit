@@ -34,6 +34,10 @@ data class EditorUiState(
     val transform: ImageOp.Transform = ImageOp.Transform(),
     /** Downscale settings contributed by the Resize tool. */
     val resize: ImageOp.Resize = ImageOp.Resize(),
+    /** Preset color filter contributed by the Filters tool. */
+    val filter: ImageOp.Filter = ImageOp.Filter(),
+    /** Fine-grained color adjustments contributed by the Adjust tool. */
+    val adjust: ImageOp.Adjust = ImageOp.Adjust(),
     /** Encoding (format + quality) applied at export by the Compress tool. */
     val exportOptions: ExportOptions = ExportOptions(),
     val availablePatterns: List<WatermarkPattern> = emptyList(),
@@ -61,6 +65,8 @@ data class EditorUiState(
             buildList {
                 if (!transform.isIdentity) add(transform)
                 if (!resize.isIdentity) add(resize)
+                if (!filter.isIdentity) add(filter)
+                if (!adjust.isIdentity) add(adjust)
                 if (config.isRenderable) add(ImageOp.Watermark(config))
             },
         )
