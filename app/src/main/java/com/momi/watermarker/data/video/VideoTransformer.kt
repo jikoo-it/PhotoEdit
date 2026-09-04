@@ -5,12 +5,19 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import androidx.media3.common.C
 import androidx.media3.common.Effect
 import androidx.media3.common.MediaItem
+import androidx.media3.common.audio.AudioProcessor
+import androidx.media3.common.audio.SpeedProvider
 import androidx.media3.effect.BitmapOverlay
+import androidx.media3.effect.Brightness
+import androidx.media3.effect.Contrast
 import androidx.media3.effect.OverlayEffect
 import androidx.media3.effect.OverlaySettings
 import androidx.media3.effect.Presentation
+import androidx.media3.effect.RgbAdjustment
+import androidx.media3.effect.RgbFilter
 import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -53,10 +60,20 @@ class VideoTransformer @Inject constructor(
         val endMs: Long? = null,
         val isImage: Boolean = false,
         val imageDurationMs: Long = 3_000L,
+        /** Playback speed multiplier (1f = original). Ignored for image clips. */
+        val speed: Float = 1f,
+        /**
+         * Per-clip reframe (width / height); null falls back to the output-wide
+         * [ExportSpec.aspectRatio]. Lets merged sources each be framed differently.
+         */
+        val aspectRatio: Float? = null,
     )
 
     /** The animation played at a boundary between two clips. */
     enum class TransitionKind { NONE, FADE, FLASH, SLIDE, ZOOM }
+
+    /** A preset color look applied across the whole output. */
+    enum class ColorFilterKind { NONE, GRAYSCALE, INVERT, WARM, COOL, BRIGHT, DARK, HIGH_CONTRAST }
 
     /** A full export description: clips to concatenate plus output-wide options. */
     data class ExportSpec(
@@ -65,6 +82,14 @@ class VideoTransformer @Inject constructor(
         val aspectRatio: Float? = null,
         val overlay: Bitmap? = null,
         val overlayAlpha: Float = 1f,
+        /**
+         * Overlay anchor in normalized device coordinates (`-1f..1f`, y up). The
+         * overlay bitmap is pre-sized by the caller, so the same anchor is used
+         * for both the overlay and the background frame — a corner anchor sits
+         * flush in that corner.
+         */
+        val overlayAnchorX: Float = 0f,
+        val overlayAnchorY: Float = 0f,
         val forceAudioTrack: Boolean = false,
         /**
          * Transition at each internal boundary. When non-empty this has
@@ -74,6 +99,8 @@ class VideoTransformer @Inject constructor(
         val transitions: List<TransitionKind> = emptyList(),
         /** Duration of each non-[TransitionKind.NONE] transition, in milliseconds. */
         val transitionDurationMs: Long = 0L,
+        /** Preset color look applied to every clip; [ColorFilterKind.NONE] = untouched. */
+        val colorFilter: ColorFilterKind = ColorFilterKind.NONE,
     )
 
     /**
@@ -102,32 +129,25 @@ class VideoTransformer @Inject constructor(
                     .build()
 
                 // Output-wide video effects, applied to every clip so merged
-                // sources are normalized to a consistent frame.
-                val videoEffects = mutableListOf<Effect>()
-                spec.aspectRatio?.let { ratio ->
-                    videoEffects.add(
-                        Presentation.createForAspectRatio(
-                            ratio,
-                            Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP,
-                        ),
-                    )
+                // sources share one look. Order matters: colour grade first,
+                // then the (ungraded-by-transitions) overlay, then transitions —
+                // whose colour dips darken everything drawn before them.
+                val sharedEffects = buildList {
+                    colorFilterEffect(spec.colorFilter)?.let(::add)
+                    spec.overlay?.let { bitmap ->
+                        val settings = OverlaySettings.Builder()
+                            .setAlphaScale(spec.overlayAlpha)
+                            .setOverlayFrameAnchor(spec.overlayAnchorX, spec.overlayAnchorY)
+                            .setBackgroundFrameAnchor(spec.overlayAnchorX, spec.overlayAnchorY)
+                            .build()
+                        val overlay: TextureOverlay =
+                            BitmapOverlay.createStaticBitmapOverlay(bitmap, settings)
+                        add(OverlayEffect(listOf(overlay)))
+                    }
+                    // Transitions are composition-wide, time-varying effects; their
+                    // boundary times are absolute on the composition timeline.
+                    addAll(buildTransitionEffects(spec))
                 }
-                spec.overlay?.let { bitmap ->
-                    val settings = OverlaySettings.Builder()
-                        .setAlphaScale(spec.overlayAlpha)
-                        .build()
-                    val overlay: TextureOverlay =
-                        BitmapOverlay.createStaticBitmapOverlay(bitmap, settings)
-                    videoEffects.add(OverlayEffect(listOf(overlay)))
-                }
-                // Transitions: composition-wide, time-varying effects that
-                // animate each boundary. Added last (colour dips darken the
-                // overlay too). Boundary times are absolute on the composition
-                // timeline, computed from clip durations.
-                videoEffects.addAll(buildTransitionEffects(spec))
-                val effects =
-                    if (videoEffects.isEmpty()) Effects.EMPTY
-                    else Effects(emptyList(), videoEffects)
 
                 val items = spec.clips.map { clip ->
                     val mediaItemBuilder = MediaItem.Builder().setUri(clip.uri)
@@ -145,7 +165,32 @@ class VideoTransformer @Inject constructor(
                             .setDurationUs(clip.imageDurationMs * 1_000L)
                             .setFrameRate(IMAGE_FRAME_RATE)
                     }
-                    if (videoEffects.isNotEmpty()) itemBuilder.setEffects(effects)
+
+                    // Per-clip effects: speed (audio + video kept in sync) and a
+                    // reframe (per-clip aspect, else the output-wide one), applied
+                    // before the shared look.
+                    val audioProcessors = mutableListOf<AudioProcessor>()
+                    val videoEffects = mutableListOf<Effect>()
+                    if (!clip.isImage && clip.speed > 0f && clip.speed != 1f) {
+                        val speedPair = Effects.createExperimentalSpeedChangingEffect(
+                            ConstantSpeedProvider(clip.speed),
+                        )
+                        audioProcessors.add(speedPair.first)
+                        videoEffects.add(speedPair.second)
+                    }
+                    (clip.aspectRatio ?: spec.aspectRatio)?.let { ratio ->
+                        videoEffects.add(
+                            Presentation.createForAspectRatio(
+                                ratio,
+                                Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP,
+                            ),
+                        )
+                    }
+                    videoEffects.addAll(sharedEffects)
+
+                    if (audioProcessors.isNotEmpty() || videoEffects.isNotEmpty()) {
+                        itemBuilder.setEffects(Effects(audioProcessors, videoEffects))
+                    }
                     itemBuilder.build()
                 }
 
@@ -234,11 +279,33 @@ class VideoTransformer @Inject constructor(
         return effects
     }
 
+    /** Maps a [ColorFilterKind] to a Media3 color [Effect], or null for NONE. */
+    private fun colorFilterEffect(kind: ColorFilterKind): Effect? = when (kind) {
+        ColorFilterKind.NONE -> null
+        ColorFilterKind.GRAYSCALE -> RgbFilter.createGrayscaleFilter()
+        ColorFilterKind.INVERT -> RgbFilter.createInvertedFilter()
+        ColorFilterKind.WARM ->
+            RgbAdjustment.Builder().setRedScale(1.15f).setBlueScale(0.85f).build()
+        ColorFilterKind.COOL ->
+            RgbAdjustment.Builder().setRedScale(0.85f).setBlueScale(1.15f).build()
+        ColorFilterKind.BRIGHT -> Brightness(0.15f)
+        ColorFilterKind.DARK -> Brightness(-0.2f)
+        ColorFilterKind.HIGH_CONTRAST -> Contrast(0.3f)
+    }
+
+    /** A [SpeedProvider] that reports one constant [speed] for the whole clip. */
+    private class ConstantSpeedProvider(private val speed: Float) : SpeedProvider {
+        override fun getSpeed(timeUs: Long): Float = speed
+        override fun getNextSpeedChangeTimeUs(timeUs: Long): Long = C.TIME_UNSET
+    }
+
     /** This clip's on-screen duration in microseconds, or 0 if unknown. */
     private fun clipDurationUs(clip: Clip): Long = when {
         clip.isImage -> clip.imageDurationMs * 1_000L
-        clip.startMs != null || clip.endMs != null ->
-            (((clip.endMs ?: 0L) - (clip.startMs ?: 0L)).coerceAtLeast(0L)) * 1_000L
+        clip.startMs != null || clip.endMs != null -> {
+            val sourceUs = (((clip.endMs ?: 0L) - (clip.startMs ?: 0L)).coerceAtLeast(0L)) * 1_000L
+            if (clip.speed > 0f) (sourceUs / clip.speed).toLong() else sourceUs
+        }
         else -> 0L
     }
 

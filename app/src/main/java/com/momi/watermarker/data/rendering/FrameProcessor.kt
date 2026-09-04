@@ -44,9 +44,10 @@ class FrameProcessor @Inject constructor() {
             Bitmap.Config.ARGB_8888,
         )
         val canvas = Canvas(output)
-        canvas.drawColor(op.colorArgb)
+        if (!op.transparentBackground) canvas.drawColor(op.colorArgb)
         canvas.drawBitmap(src, border.toFloat(), border.toFloat(), null)
-        if (keyline) {
+        // A keyline only reads against a solid mat, so skip it when transparent.
+        if (keyline && !op.transparentBackground) {
             val keyPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.STROKE
                 strokeWidth = (border * KEYLINE_FRACTION).coerceAtLeast(1f)
@@ -77,7 +78,7 @@ class FrameProcessor @Inject constructor() {
         val canvas = Canvas(output)
 
         // Rounded colored border behind the photo (outer radius grows with border).
-        if (border > 0) {
+        if (border > 0 && !op.transparentBackground) {
             val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = op.colorArgb }
             canvas.drawRoundRect(
                 RectF(0f, 0f, output.width.toFloat(), output.height.toFloat()),
@@ -119,7 +120,7 @@ class FrameProcessor @Inject constructor() {
             Bitmap.Config.ARGB_8888,
         )
         val canvas = Canvas(output)
-        canvas.drawColor(op.colorArgb)
+        if (!op.transparentBackground) canvas.drawColor(op.colorArgb)
 
         val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.BLACK

@@ -16,13 +16,24 @@ import javax.inject.Inject
 class MergeVideosUseCase @Inject constructor(
     private val videoRepository: VideoRepository,
 ) {
-    suspend operator fun invoke(clips: List<VideoClip>): Outcome<VideoClip> {
+    /**
+     * @param clips videos to concatenate, in order.
+     * @param aspectRatios optional per-clip reframe (width/height); an entry may
+     *   be null to keep that clip's own ratio. When shorter than [clips], missing
+     *   entries default to null.
+     */
+    suspend operator fun invoke(
+        clips: List<VideoClip>,
+        aspectRatios: List<Float?> = emptyList(),
+    ): Outcome<VideoClip> {
         if (clips.size < 2) {
             return Outcome.Failure(
                 IllegalArgumentException("Pick at least two videos to merge."),
             )
         }
-        val segments = clips.map { VideoSegment(it.uri) }
+        val segments = clips.mapIndexed { index, clip ->
+            VideoSegment(clip.uri, aspectRatio = aspectRatios.getOrNull(index))
+        }
         return videoRepository.export(
             VideoEditRequest(segments = segments, forceAudioTrack = true),
         )

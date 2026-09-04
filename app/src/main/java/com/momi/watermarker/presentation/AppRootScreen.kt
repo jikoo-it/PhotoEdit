@@ -27,7 +27,7 @@ import com.momi.watermarker.presentation.video.VideoEditorScreen
 
 /** The two top-level flows the app offers. */
 enum class AppSection(val title: String, val subtitle: String) {
-    IMAGE("Image Processing", "Watermark, crop, filter, and frame your photos"),
+    IMAGE("Bulk Image Processing", "Watermark, crop, filter, frame, and resize your photos"),
     VIDEO("Video Processing", "Trim, cut & join, merge, overlay, and more"),
 }
 

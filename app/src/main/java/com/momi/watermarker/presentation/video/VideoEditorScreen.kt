@@ -4,9 +4,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -27,8 +31,12 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -37,18 +45,24 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.momi.watermarker.domain.model.OverlayPosition
+import com.momi.watermarker.domain.model.VideoColorFilter
 import com.momi.watermarker.domain.model.VideoTransition
+import com.momi.watermarker.presentation.editor.components.ImageCropperScreen
 
 /**
  * Root video-editing screen. Shows an operation picker (home) and, once an
@@ -169,8 +183,13 @@ private fun OperationContent(
         ActivityResultContracts.PickMultipleVisualMedia(),
     ) { uris -> if (uris.isNotEmpty()) viewModel.onSlidesSelected(uris.map { it.toString() }) }
 
+    // The overlay image currently open in the full-screen cropper, if any.
+    var overlayCropUri by remember { mutableStateOf<String?>(null) }
+
+    Box(modifier = modifier) {
     Column(
-        modifier = modifier
+        modifier = Modifier
+            .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -237,15 +256,23 @@ private fun OperationContent(
                 )
             }
 
+            VideoOp.FILTER -> if (uiState.hasVideo) {
+                FilterControls(
+                    selected = uiState.colorFilter,
+                    onSelect = viewModel::onColorFilterSelected,
+                )
+            }
+
             VideoOp.OVERLAY -> if (uiState.hasVideo) {
                 OverlayControls(
                     uiState = uiState,
+                    viewModel = viewModel,
                     onPickImage = {
                         imagePicker.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                         )
                     },
-                    onAlphaChange = viewModel::onOverlayAlphaChanged,
+                    onCropImage = { overlayCropUri = uiState.overlayUri },
                 )
             }
 
@@ -306,6 +333,20 @@ private fun OperationContent(
             }
         }
     }
+
+        // Full-screen cropper for the overlay image, drawn on top when active.
+        overlayCropUri?.let { uri ->
+            ImageCropperScreen(
+                imageUri = uri,
+                title = "Crop overlay",
+                onConfirm = { rect, shape ->
+                    viewModel.onOverlayCropChanged(rect, shape)
+                    overlayCropUri = null
+                },
+                onCancel = { overlayCropUri = null },
+            )
+        }
+    }
 }
 
 @Composable
@@ -339,6 +380,15 @@ private fun CutJoinControls(
                     },
                     valueRange = 0f..uiState.durationMs.toFloat(),
                 )
+                Text(
+                    "Speed: ${"%.2f".format(range.speed)}×",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = range.speed,
+                    onValueChange = { viewModel.onKeepRangeSpeedChanged(index, it) },
+                    valueRange = 0.25f..4f,
+                )
                 HorizontalDivider()
             }
         }
@@ -346,6 +396,7 @@ private fun CutJoinControls(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MergeList(
     uiState: VideoEditorUiState,
@@ -357,20 +408,37 @@ private fun MergeList(
             style = MaterialTheme.typography.bodyMedium,
         )
         uiState.sources.forEachIndexed { index, _ ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "${index + 1}. Clip ${index + 1}",
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                TextButton(
-                    onClick = { viewModel.onReorderSource(index, index - 1) },
-                    enabled = index > 0,
-                ) { Text("↑") }
-                TextButton(
-                    onClick = { viewModel.onReorderSource(index, index + 1) },
-                    enabled = index < uiState.sources.lastIndex,
-                ) { Text("↓") }
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${index + 1}. Clip ${index + 1}",
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(
+                        onClick = { viewModel.onReorderSource(index, index - 1) },
+                        enabled = index > 0,
+                    ) { Text("↑") }
+                    TextButton(
+                        onClick = { viewModel.onReorderSource(index, index + 1) },
+                        enabled = index < uiState.sources.lastIndex,
+                    ) { Text("↓") }
+                }
+                // Per-clip reframe: "Original" keeps this clip's own ratio.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                ) {
+                    val selected = uiState.mergeAspects.getOrElse(index) { AspectRatioOption.ORIGINAL }
+                    AspectRatioOption.entries.forEach { option ->
+                        FilterChip(
+                            selected = option == selected,
+                            onClick = { viewModel.onMergeAspectChanged(index, option) },
+                            label = { Text(option.label) },
+                        )
+                    }
+                }
+                HorizontalDivider()
             }
         }
     }
@@ -390,6 +458,29 @@ private fun AspectRatioControls(
                     selected = option == selected,
                     onClick = { onSelect(option) },
                     label = { Text(option.label) },
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterControls(
+    selected: VideoColorFilter,
+    onSelect: (VideoColorFilter) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Color look:", style = MaterialTheme.typography.bodyMedium)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            VideoColorFilter.entries.forEach { filter ->
+                FilterChip(
+                    selected = filter == selected,
+                    onClick = { onSelect(filter) },
+                    label = { Text(filter.label) },
                 )
             }
         }
@@ -537,26 +628,167 @@ private val VideoTransition.label: String
         VideoTransition.ZOOM -> "Zoom"
     }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun OverlayControls(
     uiState: VideoEditorUiState,
+    viewModel: VideoEditorViewModel,
     onPickImage: () -> Unit,
-    onAlphaChange: (Float) -> Unit,
+    onCropImage: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = onPickImage, modifier = Modifier.fillMaxWidth()) {
-            Text(if (uiState.overlayUri != null) "Choose a different image" else "Choose overlay image")
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Image/logo vs. text overlay.
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            OverlayMode.entries.forEachIndexed { index, mode ->
+                SegmentedButton(
+                    selected = uiState.overlayMode == mode,
+                    onClick = { viewModel.onOverlayModeChanged(mode) },
+                    shape = SegmentedButtonDefaults.itemShape(index, OverlayMode.entries.size),
+                ) {
+                    Text(if (mode == OverlayMode.IMAGE) "Image" else "Text")
+                }
+            }
         }
-        if (uiState.overlayUri != null) {
+
+        when (uiState.overlayMode) {
+            OverlayMode.IMAGE -> {
+                OutlinedButton(onClick = onPickImage, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (uiState.overlayUri != null) "Choose a different image" else "Choose overlay image")
+                }
+                if (uiState.overlayUri != null) {
+                    AsyncImage(
+                        model = uiState.overlayUri,
+                        contentDescription = "Overlay image",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .size(96.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                    )
+                    OutlinedButton(onClick = onCropImage, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (uiState.overlayCropRect != null) "Adjust crop" else "Crop overlay")
+                    }
+                    if (uiState.overlayCropRect != null) {
+                        TextButton(onClick = viewModel::onOverlayCropCleared) {
+                            Text("Reset crop")
+                        }
+                    }
+                }
+            }
+
+            OverlayMode.TEXT -> {
+                OutlinedTextField(
+                    value = uiState.overlayText,
+                    onValueChange = viewModel::onOverlayTextChanged,
+                    label = { Text("Overlay text") },
+                    minLines = 1,
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text("Text color", style = MaterialTheme.typography.bodyMedium)
+                OverlayColorRow(
+                    selectedArgb = uiState.overlayTextColorArgb,
+                    onSelect = viewModel::onOverlayTextColorChanged,
+                )
+            }
+        }
+
+        // Shared positioning / sizing / opacity (only once there's something to show).
+        val hasOverlay = when (uiState.overlayMode) {
+            OverlayMode.IMAGE -> uiState.overlayUri != null
+            OverlayMode.TEXT -> uiState.overlayText.isNotBlank()
+        }
+        if (hasOverlay) {
+            HorizontalDivider()
+            Text("Position", style = MaterialTheme.typography.bodyMedium)
+            OverlayPositionGrid(
+                selected = uiState.overlayPosition,
+                onSelect = viewModel::onOverlayPositionChanged,
+            )
+
+            val sizeLabel = if (uiState.overlayMode == OverlayMode.TEXT) "Text size" else "Size"
+            Text(
+                "$sizeLabel: ${(uiState.overlaySizeFraction * 100).toInt()}% of frame",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Slider(
+                value = uiState.overlaySizeFraction,
+                onValueChange = viewModel::onOverlaySizeChanged,
+                // Text reads best small; images can span most of the frame.
+                valueRange = if (uiState.overlayMode == OverlayMode.TEXT) 0.03f..0.25f else 0.1f..1f,
+            )
+
             Text(
                 "Opacity: ${(uiState.overlayAlpha * 100).toInt()}%",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Slider(
                 value = uiState.overlayAlpha,
-                onValueChange = onAlphaChange,
+                onValueChange = viewModel::onOverlayAlphaChanged,
                 valueRange = 0f..1f,
             )
+        }
+    }
+}
+
+/** Preset overlay-text colors offered to the user. */
+private val OVERLAY_COLORS = listOf(
+    0xFFFFFFFF.toInt(), // white
+    0xFF000000.toInt(), // black
+    0xFFF44336.toInt(), // red
+    0xFFFFEB3B.toInt(), // yellow
+    0xFF4CAF50.toInt(), // green
+    0xFF2196F3.toInt(), // blue
+)
+
+/** A row of tappable color swatches; the selected one is ringed. */
+@Composable
+private fun OverlayColorRow(selectedArgb: Int, onSelect: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OVERLAY_COLORS.forEach { argb ->
+            val selected = argb == selectedArgb
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(Color(argb))
+                    .border(
+                        width = if (selected) 3.dp else 1.dp,
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.outlineVariant,
+                        shape = CircleShape,
+                    )
+                    .clickable { onSelect(argb) },
+            )
+        }
+    }
+}
+
+/** A 3×3 grid of anchor positions matching where the overlay lands in the frame. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun OverlayPositionGrid(
+    selected: OverlayPosition,
+    onSelect: (OverlayPosition) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        OverlayPosition.entries.chunked(3).forEach { rowPositions ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                rowPositions.forEach { pos ->
+                    FilterChip(
+                        selected = pos == selected,
+                        onClick = { onSelect(pos) },
+                        label = {
+                            Text(
+                                pos.label,
+                                style = MaterialTheme.typography.labelSmall,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
     }
 }

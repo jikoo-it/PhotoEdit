@@ -16,6 +16,7 @@ enum class EditorTool(val label: String, val supportsBatch: Boolean = true) {
     CROP("Crop", supportsBatch = false),
     TRANSFORM("Transform"),
     RESIZE("Resize"),
+    ASPECT("Aspect ratio"),
     FILTER("Filters"),
     ADJUST("Adjust"),
     PIXELATE("Pixelate"),

@@ -61,6 +61,7 @@ class PipelineRenderer @Inject constructor(
         is ImageOp.Crop -> geometryProcessor.crop(source, op)
         is ImageOp.Transform -> geometryProcessor.transform(source, op)
         is ImageOp.Resize -> geometryProcessor.resize(source, op)
+        is ImageOp.AspectPad -> geometryProcessor.pad(source, op)
         is ImageOp.Filter -> colorProcessor.filter(source, op)
         is ImageOp.Adjust -> colorProcessor.adjust(source, op)
         is ImageOp.Pixelate -> effectProcessor.pixelate(source, op)

@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.BorderOuter
 import androidx.compose.material.icons.filled.BrandingWatermark
 import androidx.compose.material.icons.filled.Cancel
@@ -58,6 +60,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -94,6 +97,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.LaunchedEffect
 import coil.compose.AsyncImage
+import com.momi.watermarker.domain.model.AspectRatioPreset
 import com.momi.watermarker.domain.model.CompressionMode
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.ExportFormat
@@ -129,6 +133,9 @@ private val MAX_DIMENSION_PRESETS = listOf(1024, 2048, 4096)
 
 /** Starting color shown in the custom-tint RGB picker before the user picks one. */
 private const val DEFAULT_CUSTOM_TINT = 0xFF2196F3.toInt()
+
+/** Default fill offered when switching a shaped crop / frame away from transparent. */
+private const val WHITE_ARGB = 0xFFFFFFFF.toInt()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -306,6 +313,10 @@ fun EditorScreen(
                                 viewModel = viewModel,
                             )
                             EditorTool.RESIZE -> ResizeControls(
+                                state = uiState,
+                                viewModel = viewModel,
+                            )
+                            EditorTool.ASPECT -> AspectControls(
                                 state = uiState,
                                 viewModel = viewModel,
                             )
@@ -830,6 +841,34 @@ private fun CropControls(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
+        // For a shaped (non-rectangular) crop the exported file is still
+        // rectangular, so let the user pick whether the masked area is left
+        // transparent (a cut-out) or filled with a solid color.
+        if (state.crop.shape != CropShape.RECTANGLE) {
+            ControlLabel("Masked area")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = state.crop.backgroundArgb == null,
+                    onClick = { viewModel.onCropBackgroundChanged(null) },
+                    label = { Text("Transparent") },
+                )
+                FilterChip(
+                    selected = state.crop.backgroundArgb != null,
+                    onClick = {
+                        viewModel.onCropBackgroundChanged(state.crop.backgroundArgb ?: WHITE_ARGB)
+                    },
+                    label = { Text("Fill color") },
+                )
+            }
+            state.crop.backgroundArgb?.let { bg ->
+                ColorSwatchRow(
+                    colors = PRESET_COLORS,
+                    selectedArgb = bg,
+                    onSelected = { viewModel.onCropBackgroundChanged(it) },
+                )
+            }
+        }
+
         if (cropped) {
             TextButton(onClick = viewModel::onResetCrop) { Text("Reset crop") }
         }
@@ -903,7 +942,13 @@ private fun ResizeControls(
                     label = "Scale",
                     value = resize.percent,
                     onValueChange = viewModel::onResizePercentChanged,
-                    valueRange = 0.05f..1f,
+                    valueRange = 0.05f..4f,
+                )
+                Text(
+                    text = "Below 100% shrinks the image; above 100% enlarges it " +
+                        "(e.g. 200% turns 512×512 into 1024×1024).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             ResizeMode.LONGEST_SIDE -> {
@@ -930,6 +975,60 @@ private fun ResizeControls(
 
         if (!resize.isIdentity) {
             TextButton(onClick = viewModel::onResetResize) { Text("Reset to full size") }
+        }
+    }
+}
+
+@Composable
+private fun AspectControls(
+    state: EditorUiState,
+    viewModel: EditorViewModel,
+) {
+    val aspectPad = state.aspectPad
+    val padded = !aspectPad.isIdentity
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        ControlLabel("Aspect ratio")
+        OptionChipRow(
+            options = AspectRatioPreset.entries,
+            selected = aspectPad.preset,
+            labelOf = { it.label },
+            onSelected = viewModel::onAspectPresetSelected,
+        )
+
+        Text(
+            text = "Adds bars (letterboxing) to reach the chosen ratio — nothing is " +
+                "cropped. \"Original\" keeps the image's own ratio.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        // The added bars can be transparent (a cut-out on export) or a solid fill.
+        if (padded) {
+            ControlLabel("Bars")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = aspectPad.fillArgb == null,
+                    onClick = { viewModel.onAspectFillChanged(null) },
+                    label = { Text("Transparent") },
+                )
+                FilterChip(
+                    selected = aspectPad.fillArgb != null,
+                    onClick = {
+                        viewModel.onAspectFillChanged(aspectPad.fillArgb ?: WHITE_ARGB)
+                    },
+                    label = { Text("Fill color") },
+                )
+            }
+            aspectPad.fillArgb?.let { fill ->
+                ColorSwatchRow(
+                    colors = PRESET_COLORS,
+                    selectedArgb = fill,
+                    onSelected = { viewModel.onAspectFillChanged(it) },
+                )
+            }
+
+            TextButton(onClick = viewModel::onResetAspect) { Text("Reset aspect ratio") }
         }
     }
 }
@@ -1033,27 +1132,40 @@ private fun FilterControls(
     val filter = state.filter
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ControlLabel("Preset")
-        OptionChipRow(
-            options = PhotoFilter.entries,
-            // No preset is highlighted while a custom color tint is active.
-            selected = if (filter.hasCustomTint) null else filter.filter,
-            labelOf = { it.label },
-            onSelected = viewModel::onFilterSelected,
-        )
+        ControlLabel("Filter")
+        // Presets plus a "Custom" pill in one scrollable row; exactly one is
+        // selected at a time (a preset, or the custom color tint).
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            PhotoFilter.entries.forEach { preset ->
+                FilterChip(
+                    selected = !filter.hasCustomTint && filter.filter == preset,
+                    onClick = { viewModel.onFilterSelected(preset) },
+                    label = { Text(preset.label) },
+                )
+            }
+            FilterChip(
+                selected = filter.hasCustomTint,
+                onClick = {
+                    viewModel.onCustomTintChanged(filter.customTintArgb ?: DEFAULT_CUSTOM_TINT)
+                },
+                label = { Text("Custom") },
+            )
+        }
 
-        ControlLabel("Custom color tint")
-        Text(
-            text = "Pick any color to wash the image with it; this replaces the preset.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        RgbColorPicker(
-            colorArgb = filter.customTintArgb ?: DEFAULT_CUSTOM_TINT,
-            onColorChanged = viewModel::onCustomTintChanged,
-        )
-
+        // The RGB sliders appear only once the custom pill is selected.
         if (filter.hasCustomTint) {
+            Text(
+                text = "Pick any color to wash the image with it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            RgbColorPicker(
+                colorArgb = filter.customTintArgb ?: DEFAULT_CUSTOM_TINT,
+                onColorChanged = viewModel::onCustomTintChanged,
+            )
             TextButton(onClick = { viewModel.onFilterSelected(PhotoFilter.NONE) }) {
                 Text("Remove color tint")
             }
@@ -1132,15 +1244,30 @@ private fun FrameControls(
                 valueRange = 0.01f..0.25f,
             )
 
-            // Rounded frames reveal the transparent background rather than paint a
-            // color, so a fill color only applies to the other styles.
+            // Rounded frames always reveal the transparent background; the other
+            // styles let the user choose a fill color or make the area outside
+            // the photo see-through.
             if (frame.style != FrameStyle.ROUNDED) {
-                ControlLabel("Color")
-                ColorSwatchRow(
-                    colors = PRESET_COLORS,
-                    selectedArgb = frame.colorArgb,
-                    onSelected = viewModel::onFrameColorSelected,
-                )
+                ControlLabel("Background")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = !frame.transparentBackground,
+                        onClick = { viewModel.onFrameTransparentChanged(false) },
+                        label = { Text("Fill color") },
+                    )
+                    FilterChip(
+                        selected = frame.transparentBackground,
+                        onClick = { viewModel.onFrameTransparentChanged(true) },
+                        label = { Text("Transparent") },
+                    )
+                }
+                if (!frame.transparentBackground) {
+                    ColorSwatchRow(
+                        colors = PRESET_COLORS,
+                        selectedArgb = frame.colorArgb,
+                        onSelected = viewModel::onFrameColorSelected,
+                    )
+                }
             }
 
             if (frame.style == FrameStyle.ROUNDED) {
@@ -1226,6 +1353,7 @@ private val EditorTool.icon
         EditorTool.CROP -> Icons.Filled.Crop
         EditorTool.TRANSFORM -> Icons.Filled.Rotate90DegreesCw
         EditorTool.RESIZE -> Icons.Filled.PhotoSizeSelectLarge
+        EditorTool.ASPECT -> Icons.Filled.AspectRatio
         EditorTool.FILTER -> Icons.Filled.FilterVintage
         EditorTool.ADJUST -> Icons.Filled.Tune
         EditorTool.PIXELATE -> Icons.Filled.GridOn

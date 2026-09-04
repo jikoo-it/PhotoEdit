@@ -1,7 +1,11 @@
 package com.momi.watermarker.presentation.video
 
+import com.momi.watermarker.domain.model.CropShape
+import com.momi.watermarker.domain.model.NormalizedRect
+import com.momi.watermarker.domain.model.OverlayPosition
 import com.momi.watermarker.domain.model.TrimRange
 import com.momi.watermarker.domain.model.VideoClip
+import com.momi.watermarker.domain.model.VideoColorFilter
 import com.momi.watermarker.domain.model.VideoTransition
 
 /**
@@ -13,9 +17,13 @@ enum class VideoOp(val title: String, val subtitle: String) {
     MERGE("Merge", "Join multiple videos into one"),
     REMOVE_AUDIO("Remove Sound", "Strip the audio track"),
     ASPECT_RATIO("Aspect Ratio", "Reframe to 16:9, 1:1, 9:16…"),
+    FILTER("Color Filter", "Apply a look: B&W, invert, warm/cool…"),
     OVERLAY("Image Overlay", "Stamp a logo or image onto the video"),
     SLIDESHOW("Images to Video", "Turn photos into a video with per-image timing and transitions"),
 }
+
+/** Whether the video overlay is an image/logo or a line of text. */
+enum class OverlayMode { IMAGE, TEXT }
 
 /** One image in a slideshow, with how long it stays on screen. */
 data class SlideItem(
@@ -47,9 +55,22 @@ data class VideoEditorUiState(
     val keepRanges: List<TrimRange> = emptyList(),
     // Aspect ratio
     val aspectRatio: AspectRatioOption = AspectRatioOption.ORIGINAL,
+    /** Per-source reframe for Merge, parallel to [sources]; kept in sync on add/reorder. */
+    val mergeAspects: List<AspectRatioOption> = emptyList(),
+    // Color filter (whole-video look)
+    val colorFilter: VideoColorFilter = VideoColorFilter.NONE,
     // Overlay
+    val overlayMode: OverlayMode = OverlayMode.IMAGE,
     val overlayUri: String? = null,
+    val overlayText: String = "",
+    val overlayTextColorArgb: Int = 0xFFFFFFFF.toInt(),
     val overlayAlpha: Float = 1f,
+    val overlayPosition: OverlayPosition = OverlayPosition.DEFAULT,
+    /** Overlay size as a fraction of the frame (image width / text height). */
+    val overlaySizeFraction: Float = 0.3f,
+    /** Crop applied to an image overlay before stamping; null = whole image. */
+    val overlayCropRect: NormalizedRect? = null,
+    val overlayCropShape: CropShape = CropShape.RECTANGLE,
     // Slideshow (images to video)
     val slides: List<SlideItem> = emptyList(),
     /** One entry per boundary between adjacent slides (size = slides - 1). */
@@ -76,7 +97,11 @@ data class VideoEditorUiState(
             VideoOp.MERGE -> sources.size >= 2
             VideoOp.REMOVE_AUDIO -> hasVideo
             VideoOp.ASPECT_RATIO -> hasVideo && aspectRatio.ratio != null
-            VideoOp.OVERLAY -> hasVideo && overlayUri != null
+            VideoOp.FILTER -> hasVideo && colorFilter != VideoColorFilter.NONE
+            VideoOp.OVERLAY -> hasVideo && when (overlayMode) {
+                OverlayMode.IMAGE -> overlayUri != null
+                OverlayMode.TEXT -> overlayText.isNotBlank()
+            }
             VideoOp.SLIDESHOW -> slides.size >= 2 && slides.all { it.durationMs > 0L }
             null -> false
         }

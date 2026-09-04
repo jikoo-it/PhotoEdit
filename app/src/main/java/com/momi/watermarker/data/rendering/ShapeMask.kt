@@ -11,11 +11,12 @@ import com.momi.watermarker.domain.model.squircleUnitPoints
 
 /**
  * Masks [src] to [shape]: the shape is drawn opaque, then the source is
- * composited only where the shape covers it (`SRC_IN`), leaving everything
- * outside the shape transparent. [CropShape.RECTANGLE] needs no mask and returns
- * [src] unchanged. Never recycles [src]; the caller owns its lifecycle.
+ * composited only where the shape covers it (`SRC_IN`). The area outside the
+ * shape is left transparent when [fillArgb] is null, or painted with that
+ * opaque color otherwise. [CropShape.RECTANGLE] needs no mask and returns [src]
+ * unchanged. Never recycles [src]; the caller owns its lifecycle.
  */
-fun maskToShape(src: Bitmap, shape: CropShape): Bitmap {
+fun maskToShape(src: Bitmap, shape: CropShape, fillArgb: Int? = null): Bitmap {
     if (shape == CropShape.RECTANGLE) return src
     val output = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(output)
@@ -23,7 +24,17 @@ fun maskToShape(src: Bitmap, shape: CropShape): Bitmap {
     canvas.drawPath(shapePath(shape, src.width.toFloat(), src.height.toFloat()), paint)
     paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
     canvas.drawBitmap(src, 0f, 0f, paint)
-    return output
+    if (fillArgb == null) return output
+
+    // Composite the shaped (transparent-outside) result over a solid backdrop so
+    // the masked area is filled instead of see-through.
+    val filled = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+    Canvas(filled).apply {
+        drawColor(fillArgb)
+        drawBitmap(output, 0f, 0f, null)
+    }
+    output.recycle()
+    return filled
 }
 
 /** The [shape] outline filling the [w]×[h] box. */

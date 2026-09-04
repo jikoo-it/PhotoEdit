@@ -2,6 +2,7 @@ package com.momi.watermarker.presentation.editor
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.momi.watermarker.domain.model.AspectRatioPreset
 import com.momi.watermarker.domain.model.CompressionMode
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.ExportFormat
@@ -195,7 +196,18 @@ class EditorViewModel @Inject constructor(
      */
     fun onCropChanged(rect: NormalizedRect, shape: CropShape) =
         updateAndPreview(tag = null) { state ->
-            val next = state.copy(crop = ImageOp.Crop(rect, shape))
+            // Keep the chosen masked-area background across re-crops.
+            val next = state.copy(crop = state.crop.copy(rect = rect, shape = shape))
+            next.copy(exportOptions = next.alphaSafeExport())
+        }
+
+    /**
+     * Sets the fill for the masked area of a shaped crop: null keeps it
+     * transparent (bumping JPEG → PNG so the alpha survives), a color fills it.
+     */
+    fun onCropBackgroundChanged(argb: Int?) =
+        updateAndPreview(tag = null) { state ->
+            val next = state.copy(crop = state.crop.copy(backgroundArgb = argb))
             next.copy(exportOptions = next.alphaSafeExport())
         }
 
@@ -219,13 +231,34 @@ class EditorViewModel @Inject constructor(
     fun onResizeModeSelected(mode: ResizeMode) = updateResize(tag = null) { it.copy(mode = mode) }
 
     fun onResizePercentChanged(percent: Float) =
-        updateResize("resize.percent") { it.copy(percent = percent.coerceIn(0.01f, 1f)) }
+        updateResize("resize.percent") {
+            it.copy(percent = percent.coerceIn(ImageOp.Resize.MIN_PERCENT, ImageOp.Resize.MAX_PERCENT))
+        }
 
     fun onResizeMaxDimensionChanged(maxDimensionPx: Int) =
         updateResize(tag = null) { it.copy(maxDimensionPx = maxDimensionPx.coerceAtLeast(1)) }
 
-    /** Clears any downscaling (back to full size). */
+    /** Clears any scaling (back to full size). */
     fun onResetResize() = updateResize(tag = null) { ImageOp.Resize() }
+
+    // --- Aspect-ratio (padding) events ---
+
+    /** Pads the image to [preset]; transparent bars bump JPEG → PNG. */
+    fun onAspectPresetSelected(preset: AspectRatioPreset) =
+        updateAndPreview(tag = null) { state ->
+            val next = state.copy(aspectPad = state.aspectPad.copy(preset = preset))
+            next.copy(exportOptions = next.alphaSafeExport())
+        }
+
+    /** Sets the bar fill: null keeps them transparent, a color fills them. */
+    fun onAspectFillChanged(argb: Int?) =
+        updateAndPreview(tag = null) { state ->
+            val next = state.copy(aspectPad = state.aspectPad.copy(fillArgb = argb))
+            next.copy(exportOptions = next.alphaSafeExport())
+        }
+
+    /** Clears aspect-ratio padding (back to the image's own ratio). */
+    fun onResetAspect() = updateAndPreview(tag = null) { it.copy(aspectPad = ImageOp.AspectPad()) }
 
     // --- Filter events ---
 
@@ -277,6 +310,13 @@ class EditorViewModel @Inject constructor(
         updateFrame("frame.width") { it.copy(widthRatio = ratio.coerceIn(MIN_FRAME_RATIO, MAX_FRAME_RATIO)) }
 
     fun onFrameColorSelected(colorArgb: Int) = updateFrame(tag = null) { it.copy(colorArgb = colorArgb) }
+
+    /** Toggles a see-through area outside the frame; transparent bumps JPEG → PNG. */
+    fun onFrameTransparentChanged(transparent: Boolean) =
+        updateAndPreview(tag = null) { state ->
+            val next = state.copy(frame = state.frame.copy(transparentBackground = transparent))
+            next.copy(exportOptions = next.alphaSafeExport())
+        }
 
     fun onFrameCornerRadiusChanged(ratio: Float) =
         updateFrame("frame.corner") { it.copy(cornerRadiusRatio = ratio.coerceIn(0f, MAX_CORNER_RATIO)) }

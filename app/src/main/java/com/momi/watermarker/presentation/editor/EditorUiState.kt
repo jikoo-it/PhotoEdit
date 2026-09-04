@@ -40,8 +40,10 @@ data class EditorUiState(
     val crop: ImageOp.Crop = ImageOp.Crop(),
     /** Rotate/flip settings contributed by the Transform tool. */
     val transform: ImageOp.Transform = ImageOp.Transform(),
-    /** Downscale settings contributed by the Resize tool. */
+    /** Scale settings contributed by the Resize tool. */
     val resize: ImageOp.Resize = ImageOp.Resize(),
+    /** Aspect-ratio padding contributed by the Aspect ratio tool. */
+    val aspectPad: ImageOp.AspectPad = ImageOp.AspectPad(),
     /** Preset color filter contributed by the Filters tool. */
     val filter: ImageOp.Filter = ImageOp.Filter(),
     /** Fine-grained color adjustments contributed by the Adjust tool. */
@@ -87,7 +89,10 @@ data class EditorUiState(
                 if (!adjust.isIdentity) add(adjust)
                 if (!pixelate.isIdentity) add(pixelate)
                 if (config.isRenderable) add(ImageOp.Watermark(config))
-                // The frame is outermost, wrapping the finished (watermarked) photo.
+                // Aspect padding reshapes the finished canvas; the frame then
+                // wraps that. Both come after the watermark so it stays anchored
+                // to the photo rather than the added bars/border.
+                if (!aspectPad.isIdentity) add(aspectPad)
                 if (!frame.isIdentity) add(frame)
             },
         )
@@ -96,7 +101,8 @@ data class EditorUiState(
      * Whether the assembled pipeline yields pixels with transparency (a shaped
      * crop or a rounded frame), which requires an alpha-capable export format.
      */
-    val producesTransparency: Boolean get() = crop.hasTransparency || frame.hasTransparency
+    val producesTransparency: Boolean
+        get() = crop.hasTransparency || frame.hasTransparency || aspectPad.hasTransparency
 
     /**
      * The file size to show in the preview badge. It reflects the *real* file
@@ -127,8 +133,9 @@ data class EditorUiState(
     /** Whether any editing has been done (used to enable a global "reset all"). */
     val hasAnyEdits: Boolean
         get() = !crop.isIdentity || !transform.isIdentity || !resize.isIdentity ||
-            !filter.isIdentity || !adjust.isIdentity || !pixelate.isIdentity ||
-            !frame.isIdentity || config.isRenderable || exportOptions != ExportOptions()
+            !aspectPad.isIdentity || !filter.isIdentity || !adjust.isIdentity ||
+            !pixelate.isIdentity || !frame.isIdentity || config.isRenderable ||
+            exportOptions != ExportOptions()
 
     /**
      * Save is available whenever an image is loaded — even with no edits, since

@@ -8,14 +8,16 @@ edit your media with a live preview, and save the result back to your gallery.
 The app is organized into separate flows, each documented in its own README:
 
 - **[Bulk Image Processing](README.image.md)** — apply one edit stack (crop,
-  transform, resize, filters, adjustments, pixelate, frame, watermark, export)
-  identically to a whole batch of images in a single pass.
+  transform, resize, aspect-ratio padding, filters, adjustments, pixelate,
+  frame, watermark, export) identically to a whole batch of images in a single
+  pass.
 - **Single Image Processing** — *forthcoming.* A separate flow focused on
   editing one image at a time, with tools that only make sense on a single
   photo. Will be documented as it lands.
-- **[Video Processing](README.video.md)** — trim, cut & join, merge, remove
-  audio, change aspect ratio, image overlay, and an images-to-video slideshow
-  with transitions.
+- **[Video Processing](README.video.md)** — trim, cut & join (with per-section
+  speed), merge (with per-clip framing), remove audio, change aspect ratio,
+  color filters, image/text overlays, and an images-to-video slideshow with
+  transitions.
 
 ## Architecture
 

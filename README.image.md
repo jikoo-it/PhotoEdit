@@ -21,13 +21,14 @@ sensible order to every image in the batch.
 
 | Tool | What it does |
 | --- | --- |
-| **Crop** | Drag-to-crop with a live overlay. Shapes: rectangle, circle, rounded, squircle. Non-rectangular shapes mask to **transparent** pixels outside the shape. |
+| **Crop** | Drag-to-crop with a live overlay. Shapes: rectangle, circle, rounded, squircle. For a non-rectangular shape, the area outside the shape is either **transparent** or **filled** with a color you pick. |
 | **Transform** | Rotate by 90° increments and flip horizontally / vertically. |
-| **Resize** | Scale by a percentage, or downscale so the longest side fits a max pixel count (aspect preserved). |
+| **Resize** | Scale by a percentage — **down to 5% or up to 400%** (upscale) — or downscale so the longest side fits a max pixel count (aspect preserved). |
+| **Aspect ratio** | Pad the image out to a target ratio (1:1, 16:9, 9:16, 4:3, …) **without cropping** — bars are added on the short sides, either **transparent** or a chosen fill color. Letterbox, not crop. |
 | **Filters** | Preset color filters (Mono, Sepia, Noir, Vivid, Cool, Warm, Vintage) **plus a custom RGB color tint** — pick any color (R/G/B 0–255) to wash the image. |
 | **Adjust** | Fine-grained brightness, contrast, saturation, and warmth, combined into a single `ColorMatrix`. |
 | **Pixelate** | Mosaic effect — averages each *N×N* block into one color. |
-| **Frame** | Decorative frames: Solid border, Inset mat, Rounded corners (transparent outside), or a soft drop Shadow. |
+| **Frame** | Decorative frames: Solid border, Inset mat, Rounded corners (transparent outside), or a soft drop Shadow — with an option to make the frame background **transparent** instead of filled. |
 | **Watermark** | Text watermark with pattern (Center, four corners, Tiled, Diagonal), editable text, color, font, opacity, and size. |
 | **Export** | Encode as JPEG / PNG / WebP. Choose a fixed **quality**, or a **target file size** and let the app search for the best quality that fits. |
 
@@ -37,10 +38,12 @@ Ops are always applied in this order, so results are predictable regardless of
 the order tools were touched:
 
 ```
-Crop → Transform → Resize → Filter → Adjust → Pixelate → Watermark → Frame
+Crop → Transform → Resize → Filter → Adjust → Pixelate → Watermark → Aspect ratio → Frame
 ```
 
-The frame is applied last so it wraps the finished (watermarked) photo.
+Aspect padding and the frame come **after** the watermark so it stays anchored
+to the photo rather than the added bars/border; the frame is last so it wraps
+the finished (watermarked, padded) photo.
 **Compression is not a pipeline op** — it changes how the final pixels are
 *encoded*, not the pixels themselves, so it is applied once at the write stage.
 
@@ -53,9 +56,9 @@ The frame is applied last so it wraps the finished (watermarked) photo.
 - **Accurate size badge** — shows the real on-disk size when unedited, otherwise
   the estimated size of the file that will be written with the current export
   settings.
-- **Alpha-safe export** — when the result has transparency (a shaped crop or
-  rounded frame), a lossy JPEG target is automatically bumped to PNG so the
-  transparency survives.
+- **Alpha-safe export** — when the result has transparency (a shaped crop, a
+  transparent frame background, or transparent aspect-ratio bars), a lossy JPEG
+  target is automatically bumped to PNG so the transparency survives.
 - **Undo / redo** across the whole edit history.
 - **Edge-to-edge UI** that respects the status bar and navigation / gesture
   insets on every screen.
@@ -85,7 +88,8 @@ presentation/
 
 domain/
   model/                 ImageOp (sealed) + Pipeline, CropShape, PhotoFilter,
-                         FrameStyle, ResizeMode, ExportOptions/Format, Watermark*
+                         FrameStyle, ResizeMode, AspectRatioPreset,
+                         ExportOptions/Format, Watermark*
   usecase/               ApplyPipeline, CropImage, EstimateExportSize,
                          ProcessAndSaveImages, GetImageInfo, …
 

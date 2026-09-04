@@ -30,7 +30,9 @@ class CutAndJoinVideoUseCase @Inject constructor(
                 IllegalArgumentException("Every segment must be positive (start < end)."),
             )
         }
-        val segments = ranges.map { VideoSegment(source.uri, it.startMs, it.endMs) }
+        val segments = ranges.map {
+            VideoSegment(source.uri, it.startMs, it.endMs, speed = it.speed)
+        }
         return videoRepository.export(VideoEditRequest(segments = segments))
     }
 }

@@ -42,43 +42,75 @@ sealed interface ImageOp {
     /**
      * Crops the image to a region ([rect], fractions of the source so it is
      * resolution-independent) and optionally masks it to a non-rectangular
-     * [shape] (pixels outside the shape become transparent).
+     * [shape]. Pixels outside the shape are made transparent when
+     * [backgroundArgb] is null (the default), or filled with that opaque color
+     * otherwise — since the exported file is always rectangular, this lets the
+     * user choose between a see-through cut-out and a solid backdrop.
      */
     data class Crop(
         val rect: NormalizedRect = NormalizedRect.FULL,
         val shape: CropShape = CropShape.RECTANGLE,
+        val backgroundArgb: Int? = null,
     ) : ImageOp {
         /** True only when nothing is trimmed and no shape mask is applied. */
         val isIdentity: Boolean
             get() = rect == NormalizedRect.FULL && shape == CropShape.RECTANGLE
 
-        /** Whether the crop introduces transparency (needs an alpha-capable format). */
-        val hasTransparency: Boolean get() = shape != CropShape.RECTANGLE
+        /**
+         * Whether the crop introduces transparency (needs an alpha-capable
+         * format): a non-rectangular shape whose masked area is left see-through.
+         */
+        val hasTransparency: Boolean get() = shape != CropShape.RECTANGLE && backgroundArgb == null
     }
 
-    /** Scales the image down, either by a percentage or to a maximum dimension. */
+    /**
+     * Scales the image by a percentage (up or down) or caps its longest side.
+     * A [percent] above 1f enlarges the image; below 1f shrinks it.
+     */
     data class Resize(
         val mode: ResizeMode = ResizeMode.PERCENT,
         val percent: Float = 1f,
         val maxDimensionPx: Int = DEFAULT_MAX_DIMENSION,
     ) : ImageOp {
         init {
-            require(percent in 0.01f..1f) { "percent must be within 0.01f..1f, was $percent" }
+            require(percent in MIN_PERCENT..MAX_PERCENT) {
+                "percent must be within $MIN_PERCENT..$MAX_PERCENT, was $percent"
+            }
             require(maxDimensionPx > 0) { "maxDimensionPx must be > 0, was $maxDimensionPx" }
         }
 
         /**
-         * True only when this resize can never change any image: a 100% scale.
-         * A [ResizeMode.LONGEST_SIDE] resize is not identity here — whether it
-         * changes a given image depends on that image's size, decided by the
+         * True only when this resize can never change any image: an exact 100%
+         * scale. A [ResizeMode.LONGEST_SIDE] resize is not identity here — whether
+         * it changes a given image depends on that image's size, decided by the
          * processor at render time.
          */
         val isIdentity: Boolean
-            get() = mode == ResizeMode.PERCENT && percent >= 1f
+            get() = mode == ResizeMode.PERCENT && percent == 1f
 
         companion object {
             const val DEFAULT_MAX_DIMENSION = 2048
+
+            /** Scale bounds: down to 5% and up to 400% of the original. */
+            const val MIN_PERCENT = 0.05f
+            const val MAX_PERCENT = 4f
         }
+    }
+
+    /**
+     * Pads the image out to a target aspect ratio *without cropping* any pixels:
+     * bars are added on the two shorter sides so the whole image still fits. The
+     * bars are transparent when [fillArgb] is null (the default), or that opaque
+     * color otherwise. [AspectRatioPreset.ORIGINAL] is the identity (no padding).
+     */
+    data class AspectPad(
+        val preset: AspectRatioPreset = AspectRatioPreset.ORIGINAL,
+        val fillArgb: Int? = null,
+    ) : ImageOp {
+        val isIdentity: Boolean get() = preset.ratio == null
+
+        /** Transparent bars need an alpha-capable export format. */
+        val hasTransparency: Boolean get() = !isIdentity && fillArgb == null
     }
 
     /**
@@ -143,11 +175,17 @@ sealed interface ImageOp {
         val widthRatio: Float = DEFAULT_WIDTH_RATIO,
         val colorArgb: Int = DEFAULT_COLOR,
         val cornerRadiusRatio: Float = DEFAULT_CORNER_RADIUS_RATIO,
+        val transparentBackground: Boolean = false,
     ) : ImageOp {
         val isIdentity: Boolean get() = style == FrameStyle.NONE
 
-        /** Rounded corners leave the output's true corners transparent. */
-        val hasTransparency: Boolean get() = style == FrameStyle.ROUNDED
+        /**
+         * True when the frame reveals a see-through background (needs an
+         * alpha-capable export format): a rounded frame always does, and any
+         * other style does when the fill is set to transparent.
+         */
+        val hasTransparency: Boolean
+            get() = style == FrameStyle.ROUNDED || (transparentBackground && style != FrameStyle.NONE)
 
         companion object {
             const val DEFAULT_WIDTH_RATIO = 0.05f

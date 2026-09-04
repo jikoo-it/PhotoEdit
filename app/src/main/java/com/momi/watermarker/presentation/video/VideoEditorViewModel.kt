@@ -2,9 +2,14 @@ package com.momi.watermarker.presentation.video
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.momi.watermarker.domain.model.CropShape
+import com.momi.watermarker.domain.model.NormalizedRect
+import com.momi.watermarker.domain.model.OverlayPosition
 import com.momi.watermarker.domain.model.TrimRange
 import com.momi.watermarker.domain.model.VideoClip
+import com.momi.watermarker.domain.model.VideoColorFilter
 import com.momi.watermarker.domain.model.VideoTransition
+import com.momi.watermarker.domain.usecase.ApplyVideoFilterUseCase
 import com.momi.watermarker.domain.usecase.ChangeAspectRatioUseCase
 import com.momi.watermarker.domain.usecase.CreateSlideshowUseCase
 import com.momi.watermarker.domain.usecase.CutAndJoinVideoUseCase
@@ -35,6 +40,7 @@ class VideoEditorViewModel @Inject constructor(
     private val mergeVideos: MergeVideosUseCase,
     private val removeAudio: RemoveAudioUseCase,
     private val changeAspectRatio: ChangeAspectRatioUseCase,
+    private val applyVideoFilter: ApplyVideoFilterUseCase,
     private val overlayImage: OverlayImageUseCase,
     private val createSlideshow: CreateSlideshowUseCase,
     private val saveVideo: SaveVideoUseCase,
@@ -88,13 +94,75 @@ class VideoEditorViewModel @Inject constructor(
     /** Multiple videos were picked (merge), in the order chosen. */
     fun onVideosSelected(uris: List<String>) {
         _uiState.update {
-            it.copy(sources = uris.map(::VideoClip), resultClip = null)
+            it.copy(
+                sources = uris.map(::VideoClip),
+                // One reframe slot per source (defaults to keeping each source's ratio).
+                mergeAspects = List(uris.size) { AspectRatioOption.ORIGINAL },
+                resultClip = null,
+            )
         }
     }
 
-    /** An overlay image was picked. */
+    /** Per-source reframe for a merged clip. */
+    fun onMergeAspectChanged(index: Int, option: AspectRatioOption) {
+        _uiState.update { state ->
+            state.copy(
+                mergeAspects = state.mergeAspects.mapIndexed { i, o ->
+                    if (i == index) option else o
+                },
+            ).invalidatingResult()
+        }
+    }
+
+    /** Selects the whole-video color look. */
+    fun onColorFilterSelected(filter: VideoColorFilter) {
+        _uiState.update { it.copy(colorFilter = filter).invalidatingResult() }
+    }
+
+    /** An overlay image was picked. Clears any crop from a previous image. */
     fun onOverlaySelected(uri: String) {
-        _uiState.update { it.copy(overlayUri = uri, resultClip = null, isSaved = false) }
+        _uiState.update {
+            it.copy(overlayUri = uri, overlayCropRect = null, overlayCropShape = CropShape.RECTANGLE)
+                .invalidatingResult()
+        }
+    }
+
+    /** Switches between an image/logo overlay and a text overlay. */
+    fun onOverlayModeChanged(mode: OverlayMode) {
+        _uiState.update { it.copy(overlayMode = mode).invalidatingResult() }
+    }
+
+    fun onOverlayTextChanged(text: String) {
+        _uiState.update { it.copy(overlayText = text).invalidatingResult() }
+    }
+
+    fun onOverlayTextColorChanged(argb: Int) {
+        _uiState.update { it.copy(overlayTextColorArgb = argb).invalidatingResult() }
+    }
+
+    fun onOverlayPositionChanged(position: OverlayPosition) {
+        _uiState.update { it.copy(overlayPosition = position).invalidatingResult() }
+    }
+
+    fun onOverlaySizeChanged(fraction: Float) {
+        _uiState.update {
+            it.copy(overlaySizeFraction = fraction.coerceIn(0.02f, 1f)).invalidatingResult()
+        }
+    }
+
+    /** Stores a crop chosen for the overlay image. */
+    fun onOverlayCropChanged(rect: NormalizedRect, shape: CropShape) {
+        _uiState.update {
+            it.copy(overlayCropRect = rect, overlayCropShape = shape).invalidatingResult()
+        }
+    }
+
+    /** Clears the overlay-image crop (back to the whole image). */
+    fun onOverlayCropCleared() {
+        _uiState.update {
+            it.copy(overlayCropRect = null, overlayCropShape = CropShape.RECTANGLE)
+                .invalidatingResult()
+        }
     }
 
     /** Images were picked for a slideshow, in the order chosen. */
@@ -181,7 +249,18 @@ class VideoEditorViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 keepRanges = it.keepRanges.mapIndexed { i, range ->
-                    if (i == index) TrimRange(start, end) else range
+                    if (i == index) range.copy(startMs = start, endMs = end) else range
+                },
+            ).invalidatingResult()
+        }
+    }
+
+    /** Sets the playback speed of one kept range. */
+    fun onKeepRangeSpeedChanged(index: Int, speed: Float) {
+        _uiState.update {
+            it.copy(
+                keepRanges = it.keepRanges.mapIndexed { i, range ->
+                    if (i == index) range.copy(speed = speed.coerceIn(0.25f, 4f)) else range
                 },
             ).invalidatingResult()
         }
@@ -205,10 +284,15 @@ class VideoEditorViewModel @Inject constructor(
     fun onReorderSource(from: Int, to: Int) {
         _uiState.update { state ->
             val list = state.sources.toMutableList()
+            val aspects = state.mergeAspects.toMutableList()
             if (from in list.indices && to in list.indices) {
                 list.add(to, list.removeAt(from))
+                // Keep the per-source reframe aligned with its clip.
+                if (from in aspects.indices && to in aspects.indices) {
+                    aspects.add(to, aspects.removeAt(from))
+                }
             }
-            state.copy(sources = list).invalidatingResult()
+            state.copy(sources = list, mergeAspects = aspects).invalidatingResult()
         }
     }
 
@@ -235,13 +319,25 @@ class VideoEditorViewModel @Inject constructor(
                 VideoOp.CUT_JOIN ->
                     cutAndJoin(source!!, state.keepRanges)
                 VideoOp.MERGE ->
-                    mergeVideos(state.sources)
+                    mergeVideos(state.sources, state.mergeAspects.map { it.ratio })
                 VideoOp.REMOVE_AUDIO ->
                     removeAudio(source!!)
                 VideoOp.ASPECT_RATIO ->
                     changeAspectRatio(source!!, state.aspectRatio.ratio!!)
+                VideoOp.FILTER ->
+                    applyVideoFilter(source!!, state.colorFilter)
                 VideoOp.OVERLAY ->
-                    overlayImage(source!!, state.overlayUri!!, state.overlayAlpha)
+                    overlayImage(
+                        source = source!!,
+                        imageUri = state.overlayUri.takeIf { state.overlayMode == OverlayMode.IMAGE },
+                        text = state.overlayText.takeIf { state.overlayMode == OverlayMode.TEXT },
+                        textColorArgb = state.overlayTextColorArgb,
+                        alpha = state.overlayAlpha,
+                        position = state.overlayPosition,
+                        sizeFraction = state.overlaySizeFraction,
+                        cropRect = state.overlayCropRect,
+                        cropShape = state.overlayCropShape,
+                    )
                 VideoOp.SLIDESHOW ->
                     createSlideshow(
                         frames = state.slides.map {
