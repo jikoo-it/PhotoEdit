@@ -77,6 +77,9 @@ dependencies {
     // Coil
     implementation(libs.coil.compose)
 
+    // ML Kit — on-device subject segmentation (cutout / background removal)
+    implementation(libs.mlkit.segmentation.subject)
+
     // Media3 (video editing + preview)
     implementation(libs.androidx.media3.transformer)
     implementation(libs.androidx.media3.effect)

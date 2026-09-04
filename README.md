@@ -11,9 +11,10 @@ The app is organized into separate flows, each documented in its own README:
   transform, resize, aspect-ratio padding, filters, adjustments, pixelate,
   frame, watermark, export) identically to a whole batch of images in a single
   pass.
-- **Single Image Processing** — *forthcoming.* A separate flow focused on
-  editing one image at a time, with tools that only make sense on a single
-  photo. Will be documented as it lands.
+- **[Single Image Cut-out](README.cutout.md)** — extract the subject of one
+  photo on-device (ML Kit subject segmentation), then keep the background
+  transparent, fill it with a solid color, blur the original for a portrait
+  look, or replace it with another image.
 - **[Video Processing](README.video.md)** — trim, cut & join (with per-section
   speed), merge (with per-clip framing), remove audio, change aspect ratio,
   color filters, image/text overlays, and an images-to-video slideshow with
@@ -28,20 +29,22 @@ packages specific to each.
 
 ```
 presentation/            UI (Jetpack Compose) + MVVM
-  AppRootScreen.kt       Chooser between the image and video flows
+  AppRootScreen.kt       Chooser between the image, cut-out, and video flows
   editor/                Image editor          → README.image.md
+  cutout/                Single-image cut-out  → README.cutout.md
   video/                 Video editor          → README.video.md
   theme/                 Material 3 theme
 
 domain/                  Pure Kotlin — no Android types
   model/                 ImageOp (sealed) + Pipeline, watermark & export models,
-                         video models
-  repository/            Image / Media / Video repositories (abstractions)
-  usecase/               One use case per action (image + video)
+                         CutoutRenderSpec/BackgroundMode, video models
+  repository/            Image / Media / Cutout / Video repositories (abstractions)
+  usecase/               One use case per action (image + cut-out + video)
   util/                  Outcome<T> result type
 
 data/                    Framework implementations
-  rendering/             Per-op image processors + PipelineRenderer
+  rendering/             Per-op image processors + PipelineRenderer + CutoutComposer
+  mlkit/                 SubjectSegmenter (ML Kit subject segmentation wrapper)
   storage/               ImageStorage (decode/EXIF, cache, MediaStore, FileProvider)
   video/                 Video processing (see README.video.md)
   repository/            Repository implementations

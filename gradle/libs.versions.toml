@@ -18,6 +18,7 @@ navigationCompose = "2.8.4"
 coil = "2.7.0"
 coroutines = "1.9.0"
 media3 = "1.5.1"
+mlkitSubjectSegmentation = "16.0.0-beta1"
 mockk = "1.13.13"
 turbine = "1.2.0"
 coreTesting = "2.2.0"
@@ -50,6 +51,10 @@ androidx-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navig
 
 # Coil (image loading)
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# ML Kit — on-device subject segmentation (cutout / background removal),
+# distributed via Google Play services (model downloaded on demand).
+mlkit-segmentation-subject = { group = "com.google.android.gms", name = "play-services-mlkit-subject-segmentation", version.ref = "mlkitSubjectSegmentation" }
 
 # Media3 (video: transform/export, effects, playback preview)
 androidx-media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "media3" }

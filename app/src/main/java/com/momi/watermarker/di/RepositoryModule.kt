@@ -1,7 +1,9 @@
 package com.momi.watermarker.di
 
+import com.momi.watermarker.data.repository.ImageCutoutRepositoryImpl
 import com.momi.watermarker.data.repository.ImageProcessingRepositoryImpl
 import com.momi.watermarker.data.repository.MediaRepositoryImpl
+import com.momi.watermarker.domain.repository.ImageCutoutRepository
 import com.momi.watermarker.domain.repository.ImageProcessingRepository
 import com.momi.watermarker.domain.repository.MediaRepository
 import dagger.Binds
@@ -28,4 +30,10 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindMediaRepository(impl: MediaRepositoryImpl): MediaRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindImageCutoutRepository(
+        impl: ImageCutoutRepositoryImpl,
+    ): ImageCutoutRepository
 }
