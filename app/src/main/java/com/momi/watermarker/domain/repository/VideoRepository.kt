@@ -1,7 +1,9 @@
 package com.momi.watermarker.domain.repository
 
+import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoEditRequest
+import com.momi.watermarker.domain.model.VideoSegment
 import com.momi.watermarker.domain.util.Outcome
 
 /**
@@ -24,6 +26,24 @@ interface VideoRepository {
      * app cache, returning a reference (FileProvider URI) to the exported clip.
      */
     suspend fun export(request: VideoEditRequest): Outcome<VideoClip>
+
+    /**
+     * Builds a slideshow video from still [images] (each an `isImage`
+     * [VideoSegment] carrying its uri and on-screen duration), pre-rendering the
+     * per-boundary [transitions] frame-by-frame before exporting. Unlike the
+     * composition-wide [VideoTransition] effects used by [export], these are true
+     * cross-dissolves (both images visible during the blend).
+     *
+     * @param transitions one entry per boundary (size = images - 1).
+     * @param transitionDurationMs length of each non-[SlideTransition.NONE] blend.
+     * @param aspectRatio output width/height; null uses the first image's ratio.
+     */
+    suspend fun createSlideshow(
+        images: List<VideoSegment>,
+        transitions: List<SlideTransition>,
+        transitionDurationMs: Long,
+        aspectRatio: Float?,
+    ): Outcome<VideoClip>
 
     /**
      * Persists [clip] into the shared gallery (MediaStore Movies) under

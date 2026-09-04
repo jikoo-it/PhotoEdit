@@ -4,12 +4,15 @@ import android.graphics.Bitmap
 import android.net.Uri
 import com.momi.watermarker.data.rendering.GeometryProcessor
 import com.momi.watermarker.data.storage.VideoStorage
+import com.momi.watermarker.data.video.SlideshowComposer
 import com.momi.watermarker.data.video.VideoTransformer
 import com.momi.watermarker.di.IoDispatcher
 import com.momi.watermarker.domain.model.ImageOp
+import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoColorFilter
 import com.momi.watermarker.domain.model.VideoEditRequest
+import com.momi.watermarker.domain.model.VideoSegment
 import com.momi.watermarker.domain.model.VideoTransition
 import com.momi.watermarker.domain.repository.VideoRepository
 import com.momi.watermarker.domain.util.Outcome
@@ -26,6 +29,7 @@ class VideoRepositoryImpl @Inject constructor(
     private val videoStorage: VideoStorage,
     private val videoTransformer: VideoTransformer,
     private val geometryProcessor: GeometryProcessor,
+    private val slideshowComposer: SlideshowComposer,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : VideoRepository {
 
@@ -132,6 +136,26 @@ class VideoRepositoryImpl @Inject constructor(
         VideoColorFilter.BRIGHT -> VideoTransformer.ColorFilterKind.BRIGHT
         VideoColorFilter.DARK -> VideoTransformer.ColorFilterKind.DARK
         VideoColorFilter.HIGH_CONTRAST -> VideoTransformer.ColorFilterKind.HIGH_CONTRAST
+    }
+
+    override suspend fun createSlideshow(
+        images: List<VideoSegment>,
+        transitions: List<SlideTransition>,
+        transitionDurationMs: Long,
+        aspectRatio: Float?,
+    ): Outcome<VideoClip> {
+        // Pre-render every transition frame (CPU/IO-heavy) off the main thread…
+        val baked = try {
+            withContext(dispatcher) {
+                val frames = images.map { SlideshowComposer.Frame(it.uri, it.imageDurationMs) }
+                slideshowComposer.compose(frames, transitions, transitionDurationMs, aspectRatio)
+            }
+        } catch (t: Throwable) {
+            return Outcome.Failure(t)
+        }
+        // …then feed the baked stills through the ordinary export pipeline; they
+        // are already exact-canvas images, so no aspect/transition transforms.
+        return export(VideoEditRequest(segments = baked))
     }
 
     override suspend fun saveToGallery(

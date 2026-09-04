@@ -1,9 +1,8 @@
 package com.momi.watermarker.domain.usecase
 
+import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoClip
-import com.momi.watermarker.domain.model.VideoEditRequest
 import com.momi.watermarker.domain.model.VideoSegment
-import com.momi.watermarker.domain.model.VideoTransition
 import com.momi.watermarker.domain.repository.VideoRepository
 import com.momi.watermarker.domain.util.Outcome
 import javax.inject.Inject
@@ -11,10 +10,11 @@ import javax.inject.Inject
 /**
  * Builds a video from a list of still images ("slideshow"), where each image is
  * shown for its own duration and each boundary between two images plays its own
- * [VideoTransition].
+ * [SlideTransition].
  *
- * Images are normalised to [aspectRatio] (they usually differ in size) and
- * concatenated through the shared export pipeline.
+ * Transitions are **pre-rendered** frame-by-frame (see
+ * [VideoRepository.createSlideshow]) so cross-dissolves show both images at
+ * once, rather than approximated by a composition-wide video effect.
  */
 class CreateSlideshowUseCase @Inject constructor(
     private val videoRepository: VideoRepository,
@@ -24,7 +24,7 @@ class CreateSlideshowUseCase @Inject constructor(
 
     suspend operator fun invoke(
         frames: List<Frame>,
-        transitions: List<VideoTransition>,
+        transitions: List<SlideTransition>,
         transitionDurationMs: Long,
         aspectRatio: Float?,
     ): Outcome<VideoClip> {
@@ -38,26 +38,24 @@ class CreateSlideshowUseCase @Inject constructor(
                 IllegalArgumentException("Every image needs a positive duration."),
             )
         }
-        val segments = frames.map { frame ->
+        val images = frames.map { frame ->
             VideoSegment(
                 uri = frame.uri,
                 isImage = true,
                 imageDurationMs = frame.durationMs,
             )
         }
-        // The pipeline expects one transition per internal boundary; pad/trim
-        // to exactly frames - 1 so a mismatched list can't misalign fades.
+        // Exactly one transition per internal boundary; pad/trim a mismatched
+        // list so it can't misalign against the boundaries.
         val boundaries = frames.size - 1
         val normalized = List(boundaries) { i ->
-            transitions.getOrElse(i) { VideoTransition.NONE }
+            transitions.getOrElse(i) { SlideTransition.NONE }
         }
-        return videoRepository.export(
-            VideoEditRequest(
-                segments = segments,
-                aspectRatio = aspectRatio,
-                transitions = normalized,
-                transitionDurationMs = transitionDurationMs,
-            ),
+        return videoRepository.createSlideshow(
+            images = images,
+            transitions = normalized,
+            transitionDurationMs = transitionDurationMs,
+            aspectRatio = aspectRatio,
         )
     }
 }

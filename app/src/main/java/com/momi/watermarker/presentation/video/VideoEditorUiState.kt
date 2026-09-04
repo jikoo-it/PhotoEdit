@@ -3,10 +3,10 @@ package com.momi.watermarker.presentation.video
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.OverlayPosition
+import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.TrimRange
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoColorFilter
-import com.momi.watermarker.domain.model.VideoTransition
 
 /**
  * The editing operations offered on the video home screen. Each is a distinct,
@@ -74,7 +74,7 @@ data class VideoEditorUiState(
     // Slideshow (images to video)
     val slides: List<SlideItem> = emptyList(),
     /** One entry per boundary between adjacent slides (size = slides - 1). */
-    val transitions: List<VideoTransition> = emptyList(),
+    val transitions: List<SlideTransition> = emptyList(),
     val transitionDurationMs: Long = 600L,
     val slideshowAspect: AspectRatioOption = AspectRatioOption.WIDE,
     // Result / progress

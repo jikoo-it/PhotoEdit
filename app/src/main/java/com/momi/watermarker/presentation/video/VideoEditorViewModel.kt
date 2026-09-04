@@ -6,9 +6,9 @@ import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.OverlayPosition
 import com.momi.watermarker.domain.model.TrimRange
+import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoColorFilter
-import com.momi.watermarker.domain.model.VideoTransition
 import com.momi.watermarker.domain.usecase.ApplyVideoFilterUseCase
 import com.momi.watermarker.domain.usecase.ChangeAspectRatioUseCase
 import com.momi.watermarker.domain.usecase.CreateSlideshowUseCase
@@ -186,7 +186,7 @@ class VideoEditorViewModel @Inject constructor(
         }
     }
 
-    fun onSlideTransitionChanged(boundaryIndex: Int, transition: VideoTransition) {
+    fun onSlideTransitionChanged(boundaryIndex: Int, transition: SlideTransition) {
         _uiState.update { state ->
             state.copy(
                 transitions = state.transitions.mapIndexed { i, t ->
@@ -226,10 +226,10 @@ class VideoEditorViewModel @Inject constructor(
         }
     }
 
-    /** A slideshow defaults to a fade between every pair of images. */
-    private fun defaultTransitions(slideCount: Int): List<VideoTransition> =
+    /** A slideshow defaults to a cross-dissolve between every pair of images. */
+    private fun defaultTransitions(slideCount: Int): List<SlideTransition> =
         if (slideCount <= 1) emptyList()
-        else List(slideCount - 1) { VideoTransition.FADE }
+        else List(slideCount - 1) { SlideTransition.DEFAULT }
 
     // --- Per-op controls ------------------------------------------------------
 

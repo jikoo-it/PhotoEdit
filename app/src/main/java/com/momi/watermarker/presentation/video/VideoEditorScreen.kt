@@ -60,8 +60,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.momi.watermarker.domain.model.OverlayPosition
+import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoColorFilter
-import com.momi.watermarker.domain.model.VideoTransition
 import com.momi.watermarker.presentation.editor.components.ImageCropperScreen
 
 /**
@@ -535,7 +535,7 @@ private fun SlideshowControls(
             )
             if (index < uiState.slides.lastIndex) {
                 TransitionRow(
-                    selected = uiState.transitions.getOrElse(index) { VideoTransition.NONE },
+                    selected = uiState.transitions.getOrElse(index) { SlideTransition.NONE },
                     onSelect = { viewModel.onSlideTransitionChanged(index, it) },
                 )
             }
@@ -593,8 +593,8 @@ private fun SlideRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TransitionRow(
-    selected: VideoTransition,
-    onSelect: (VideoTransition) -> Unit,
+    selected: SlideTransition,
+    onSelect: (SlideTransition) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
@@ -606,7 +606,7 @@ private fun TransitionRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.horizontalScroll(rememberScrollState()),
         ) {
-            VideoTransition.entries.forEach { transition ->
+            SlideTransition.entries.forEach { transition ->
                 FilterChip(
                     selected = transition == selected,
                     onClick = { onSelect(transition) },
@@ -617,16 +617,6 @@ private fun TransitionRow(
         HorizontalDivider()
     }
 }
-
-/** Human-readable label for a transition chip. */
-private val VideoTransition.label: String
-    get() = when (this) {
-        VideoTransition.NONE -> "Cut"
-        VideoTransition.FADE -> "Fade"
-        VideoTransition.FLASH -> "Flash"
-        VideoTransition.SLIDE -> "Slide"
-        VideoTransition.ZOOM -> "Zoom"
-    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

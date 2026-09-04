@@ -174,6 +174,29 @@ class VideoStorage @Inject constructor(
     }
 
     /**
+     * Deletes any previously baked slideshow transition frames. Called at the
+     * start of a slideshow compose so temp frames don't accumulate across runs.
+     */
+    fun clearSlideshowFrames() {
+        val dir = File(context.cacheDir, SLIDESHOW_FRAMES_DIR)
+        if (dir.exists()) dir.listFiles()?.forEach { it.delete() }
+    }
+
+    /**
+     * Writes [bitmap] as a JPEG into the slideshow-frames cache and returns a
+     * `file://` URI Media3 can read as an image clip. Frames are opaque
+     * (cover-fit), so JPEG keeps the many baked frames small.
+     */
+    fun writeSlideshowFrame(bitmap: Bitmap, index: Int): Uri {
+        val dir = File(context.cacheDir, SLIDESHOW_FRAMES_DIR).apply { mkdirs() }
+        val file = File(dir, "frame_%06d.jpg".format(index))
+        file.outputStream().use { out ->
+            bitmap.compress(Bitmap.CompressFormat.JPEG, FRAME_JPEG_QUALITY, out)
+        }
+        return Uri.fromFile(file)
+    }
+
+    /**
      * Copies the video at [sourceUri] into the device gallery
      * (Movies/MomiWaterMarker) and returns the new MediaStore content URI.
      */
@@ -209,6 +232,8 @@ class VideoStorage @Inject constructor(
 
     private companion object {
         const val SHARED_DIR = "shared_videos"
+        const val SLIDESHOW_FRAMES_DIR = "slideshow_frames"
+        const val FRAME_JPEG_QUALITY = 88
 
         /**
          * Safe upper bound for an overlay bitmap's dimensions. The GL_MAX_TEXTURE_SIZE

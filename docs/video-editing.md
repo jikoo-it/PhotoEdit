@@ -3,7 +3,7 @@
 > Living document for the video-editing feature set on `feature/image-processing-suite`.
 > Captures research, decisions, the milestone plan, risks, and a running progress log.
 
-Last updated: 2026-09-04 (slideshow + transitions)
+Last updated: 2026-09-04 (editing depth + pre-rendered slideshow transitions)
 
 ---
 
@@ -161,9 +161,26 @@ Each boundary's half-width is clamped to `min(transitionMs, shorter neighbour)` 
 image can't be dimmed/moved end-to-end. Slides/zooms reveal the black background (no overlap),
 so they read as *motion through black* rather than a true cross-dissolve.
 
-**Known limitation / future work:** a real **cross-dissolve** (both clips visible at once)
-still needs an overlapping-sequence compositor or a custom `GlShaderProgram` sampling two
-textures; FFmpeg `xfade` remains the last-resort fallback. Tracked, not yet built.
+**Update (2026-09-04):** for **slideshows** this limitation is now solved by pre-rendering
+(see §4c) — true cross-dissolves and ~29 effects. It still stands for **video merges**, where
+frames can't be pre-computed; that would need an overlapping-sequence compositor or a
+two-texture `GlShaderProgram` (FFmpeg `xfade` the last resort).
+
+## 4c. Slideshow transitions — pre-rendered (shipped)
+
+A slideshow's neighbours are **still images**, so every transition frame is fully determined
+ahead of time — no GL compositor needed. `SlideshowComposer` cover-fits both images to one
+output canvas and `TransitionRenderer` draws each in-between frame on a `Canvas` (blending both
+per pixel); the frames are written as short image clips and concatenated through the ordinary
+`export` pipeline. This yields a **true cross-dissolve** (both images visible) and a large effect
+family (`SlideTransition`, ~29: dissolve, fade black/white, wipe/push/cover/reveal ×4 dirs,
+zoom in/out, iris open/close, blinds H/V, checker, diagonal wipes, rotate).
+
+Timeline is hybrid: each image is one steady clip (full duration − `D/2` per transitioned edge)
+plus `round(D·fps)` baked frames (fps 24, JPEG, ≤1280px long edge). `D` clamped to
+`min(transitionMs, ½ each neighbour)`. Baked frames go to a cache dir cleared each compose.
+`VideoRepository.createSlideshow` runs the (CPU/IO-heavy) bake off the main thread, then exports.
+`VideoTransition`'s composition-wide effects stay for the video-merge path (§4b).
 
 ## 5. Progress log
 
@@ -199,3 +216,14 @@ textures; FFmpeg `xfade` remains the last-resort fallback. Tracked, not yet buil
 - **2026-09-04** — Removed the standalone **Trim** op: it was exactly the single-segment case of
   **Cut & Join**, so Trim now lives inside "Trim / Cut & Join" (which opens with one kept range).
   Deleted `TrimVideoUseCase` and the trim-only UI state/controls.
+- **2026-09-04** — **Video editing depth** shipped: per-section **playback speed** in Cut & Join
+  (audio+video via `Effects.createExperimentalSpeedChangingEffect`), a whole-video **Color Filter**
+  op (`VideoColorFilter` → Media3 `RgbFilter`/`RgbAdjustment`/`Brightness`/`Contrast`), and
+  **per-clip aspect** framing when merging (per-`EditedMediaItem` `Presentation`). Also **image/text
+  overlays** with crop/resize/9-anchor positioning. Compiles clean; pending on-device verification.
+- **2026-09-04** — **Real slideshow transitions** shipped (§4c): `SlideshowComposer` +
+  `TransitionRenderer` pre-render each boundary frame-by-frame on a `Canvas`, giving true
+  cross-dissolves and ~29 `SlideTransition` effects with no GL shader. Slideshow now routes through
+  `VideoRepository.createSlideshow` (bakes off-thread, then exports baked stills); the old
+  composition-wide transition path is retained for video merges only. Compiles clean; the baked
+  frames + Canvas blending are deterministic, but end-to-end export needs on-device verification.

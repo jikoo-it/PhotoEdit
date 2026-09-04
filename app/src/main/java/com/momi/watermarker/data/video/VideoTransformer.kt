@@ -149,6 +149,9 @@ class VideoTransformer @Inject constructor(
                     addAll(buildTransitionEffects(spec))
                 }
 
+                // Whether any clip runs through the GL effect pipeline (overlay,
+                // colour filter, transition, reframe, speed). Drives HDR handling.
+                var hasVideoEffects = false
                 val items = spec.clips.map { clip ->
                     val mediaItemBuilder = MediaItem.Builder().setUri(clip.uri)
                     if (!clip.isImage && (clip.startMs != null || clip.endMs != null)) {
@@ -191,6 +194,7 @@ class VideoTransformer @Inject constructor(
                     if (audioProcessors.isNotEmpty() || videoEffects.isNotEmpty()) {
                         itemBuilder.setEffects(Effects(audioProcessors, videoEffects))
                     }
+                    if (videoEffects.isNotEmpty()) hasVideoEffects = true
                     itemBuilder.build()
                 }
 
@@ -198,6 +202,16 @@ class VideoTransformer @Inject constructor(
                 val compositionBuilder = Composition.Builder(sequence)
                 if (spec.forceAudioTrack) {
                     compositionBuilder.experimentalSetForceAudioTrack(true)
+                }
+                // Any GL effect (overlay, colour filter, transition, reframe) runs
+                // in an SDR pipeline. Keeping HDR while compositing an SDR overlay
+                // bitmap crashes the frame processor on HDR (HLG/PQ) sources, so
+                // tone-map HDR -> SDR whenever we apply effects. Untouched
+                // pass-through clips keep their original HDR.
+                if (hasVideoEffects) {
+                    compositionBuilder.setHdrMode(
+                        Composition.HDR_MODE_TONE_MAP_HDR_TO_SDR_USING_OPEN_GL,
+                    )
                 }
                 val composition = compositionBuilder.build()
 

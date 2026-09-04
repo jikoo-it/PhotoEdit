@@ -18,21 +18,44 @@ the gallery.
 | **Aspect Ratio** | Reframe to 16:9, 1:1, 9:16, or 4:3 (`Presentation.createForAspectRatio`, scale-to-fit-with-crop). |
 | **Color Filter** | Apply a preset look to the whole video: B&W, Invert, Warm, Cool, Bright, Dark, or Punch (see [Color filters](#color-filters)). |
 | **Overlay** | Stamp an **image/logo** *or* a line of **text** over every frame. Images can be **cropped** (reusing the photo cropper, shaped masks included) and **resized**; text has a color picker and size. Both choose one of **nine anchor positions** and an opacity (`OverlayEffect` + `BitmapOverlay` with overlay/background frame anchors). |
-| **Images → Video (slideshow)** | Turn photos into a video: set **each image's on-screen duration** and choose the **transition at every boundary independently** (each can differ), with a shared transition length and an output aspect ratio. |
+| **Images → Video (slideshow)** | Turn photos into a video: set **each image's on-screen duration** and pick from **~29 real transitions** at every boundary independently (dissolve, fades, wipes, pushes, covers/reveals, zoom, iris, blinds, checker, diagonal, rotate — see [Slideshow transitions](#slideshow-transitions)), with a shared transition length and an output aspect ratio. |
 
 Every flow ends in **preview-before-save**: the export runs, the result plays in
 an ExoPlayer preview, and only then is "Save to gallery" offered. Editing any
 control after a preview invalidates the stale result so it can't be saved.
 
-## Transitions
+## Slideshow transitions
 
 Media3 1.5.1 has **no native clip-to-clip transition API** (confirmed against
-the shipped jars). Rather than block on a custom compositor, transitions are
-rendered as **composition-wide, time-varying effects** that need no clip
-overlap: the effect sees composition-absolute presentation times, and each
-boundary's absolute timestamp is computed from the clip layout
-(`buildTransitionEffects` in `VideoTransformer`). Each boundary carries its own
-`VideoTransition`, so every one can differ.
+the shipped jars), so there's no overlapping-sequence crossfade to lean on. For
+a **slideshow**, though, every neighbour is a *still image* — which makes the
+whole problem tractable **without** a GL compositor.
+
+`SlideshowComposer` **pre-renders** the transition: it cover-fits both images to
+one output canvas and asks `TransitionRenderer` to draw each in-between frame on
+a `Canvas` (blending both images per pixel), then splices those frames in as
+short image clips. The result is a **true cross-dissolve** — both images visible
+at once — and, because we own every pixel, a large family of effects at the cost
+of a `when` branch each rather than a shader.
+
+The timeline is a hybrid: each image is **one** steady clip for its full
+duration minus `D/2` at each transitioned edge, followed by `round(D · fps)`
+baked transition frames (fps 24, JPEG, ≤ 1280px long edge). `D` is clamped to
+`min(transitionMs, ½ of each neighbour)` so a short image is never over-consumed.
+Baked frames live in a cache dir that's cleared at the start of every compose.
+
+`SlideTransition` (~29 values) covers: **Dissolve**; **Fade** through black /
+white; **Wipe**, **Push**, **Cover**, **Reveal** in all four directions; **Zoom**
+in/out; **Iris** open/close; horizontal / vertical **Blinds**; **Checker**;
+diagonal wipes; and **Rotate**. Each boundary picks its own, so every one can
+differ.
+
+### Video-merge transitions (non-overlapping)
+
+Videos can't be pre-rendered this way, so **merges** still use the
+overlap-free approach: composition-wide, time-varying effects keyed on
+composition-absolute boundary times (`buildTransitionEffects` in
+`VideoTransformer`, driven by `VideoTransition`).
 
 | Transition | Effect | Media3 interface |
 | --- | --- | --- |
@@ -41,14 +64,10 @@ boundary's absolute timestamp is computed from the clip layout
 | **Slide** | outgoing translates off left, incoming translates in from the right (NDC) | `GeometricTransitionsMatrix : MatrixTransformation` |
 | **Zoom** | outgoing scales to a point at the centre, incoming grows back out | `GeometricTransitionsMatrix` |
 
-Each boundary's half-width is clamped to `min(transitionMs, shorter neighbour)`
-so a short image can't be dimmed/moved end-to-end.
-
-**Known limitation:** because there's no overlap, slide/zoom reveal the (black)
-background — they read as *motion through black* rather than a true
-cross-dissolve. A real cross-dissolve (both clips visible at once) needs an
-overlapping-sequence compositor or a two-texture `GlShaderProgram`; FFmpeg
-`xfade` is the last-resort fallback. Tracked, not yet built.
+These read as *motion through black* (no overlap), not a cross-dissolve — a real
+cross-dissolve **between videos** would still need an overlapping-sequence
+compositor or a two-texture `GlShaderProgram` (FFmpeg `xfade` the last resort).
+The slideshow path above sidesteps that entirely by pre-rendering.
 
 ## Color filters
 
@@ -90,9 +109,10 @@ presentation/video/
 
 domain/
   model/                   VideoClip, VideoSegment, VideoEditRequest, TrimRange
-                           (with speed), VideoTransition, VideoColorFilter,
-                           OverlayPosition, CropShape/NormalizedRect
-  repository/              VideoRepository (abstraction)
+                           (with speed), VideoTransition (merge), SlideTransition
+                           (slideshow, ~29), VideoColorFilter, OverlayPosition,
+                           CropShape/NormalizedRect
+  repository/              VideoRepository (abstraction; export + createSlideshow)
   usecase/                 CutAndJoinVideo, MergeVideos, RemoveAudio,
                            ChangeAspectRatio, ApplyVideoFilter, OverlayImage,
                            CreateSlideshow, GetVideoDuration, SaveVideo
@@ -100,9 +120,12 @@ domain/
 data/
   video/                   VideoTransformer (Media3 Transformer wrapper) +
                            FadeTransitionsMatrix, GeometricTransitionsMatrix,
-                           ColorFilterKind, ConstantSpeedProvider
+                           ColorFilterKind, ConstantSpeedProvider;
+                           SlideshowComposer + TransitionRenderer (pre-rendered
+                           slideshow transitions)
   storage/                 VideoStorage (probe, decode, MediaStore, FileProvider,
-                           text-overlay render, overlay-bitmap hardening)
+                           text-overlay render, overlay-bitmap hardening,
+                           slideshow-frame baking)
   repository/              VideoRepositoryImpl
 
 di/VideoModule.kt          Binds VideoRepository
