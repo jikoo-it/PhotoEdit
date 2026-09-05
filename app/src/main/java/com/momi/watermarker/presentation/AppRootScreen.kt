@@ -22,14 +22,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.momi.watermarker.presentation.cutout.CutoutScreen
 import com.momi.watermarker.presentation.editor.EditorScreen
+import com.momi.watermarker.presentation.single.SingleImageScreen
 import com.momi.watermarker.presentation.video.VideoEditorScreen
 
 /** The top-level flows the app offers. */
 enum class AppSection(val title: String, val subtitle: String) {
     IMAGE("Bulk Image Processing", "Watermark, crop, filter, frame, and resize your photos"),
-    CUTOUT("Single Image Cut-out", "Remove or replace the background of one photo"),
+    SINGLE_IMAGE("Single Image Processing", "Portrait color, cut-out, and background removal for one photo"),
     VIDEO("Video Processing", "Trim, cut & join, merge, overlay, and more"),
 }
 
@@ -52,9 +52,8 @@ fun AppRootScreen(modifier: Modifier = Modifier) {
             EditorScreen(modifier = modifier)
         }
 
-        AppSection.CUTOUT -> {
-            BackHandler { section = null }
-            CutoutScreen(modifier = modifier, onExit = { section = null })
+        AppSection.SINGLE_IMAGE -> {
+            SingleImageScreen(modifier = modifier, onExit = { section = null })
         }
 
         AppSection.VIDEO -> VideoEditorScreen(

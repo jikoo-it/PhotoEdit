@@ -1,7 +1,7 @@
-# MomiWaterMarker — Single Image Cut-out
+# MomiWaterMarker — Cut-out Studio
 
-The **Single Image Cut-out** flow (chosen from the app's launch screen; see the
-other flows in [README.md](README.md)) extracts the subject of one photo
+The **Cut-out Studio** tool (under **Single Image Processing** on the launch
+screen; see the other flows in [README.md](README.md)) extracts the subject of one photo
 **entirely on-device** and lets you choose what sits behind it. Pick a photo,
 the subject is segmented once, then swap between backgrounds with a live
 preview and save.

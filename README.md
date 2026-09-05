@@ -11,10 +11,13 @@ The app is organized into separate flows, each documented in its own README:
   transform, resize, aspect-ratio padding, filters, adjustments, pixelate,
   frame, watermark, export) identically to a whole batch of images in a single
   pass.
-- **[Single Image Cut-out](README.cutout.md)** — extract the subject of one
-  photo on-device (ML Kit subject segmentation), then keep the background
-  transparent, fill it with a solid color, blur the original for a portrait
-  look, or replace it with another image.
+- **Single Image Processing** — per-photo tools, on-device:
+  - **[Portrait Color](README.portrait.md)** — keep the detected person(s) in
+    color, turn the background grayscale, and optionally blur it (ML Kit selfie
+    segmentation).
+  - **[Cut-out Studio](README.cutout.md)** — extract the subject of one photo
+    (ML Kit subject segmentation), then keep the background transparent, fill it
+    with a solid color, blur the original, or replace it with another image.
 - **[Video Processing](README.video.md)** — trim, cut & join (with per-section
   speed), merge (with per-clip framing), remove audio, change aspect ratio,
   color filters, image/text overlays, and an images-to-video slideshow with
@@ -29,22 +32,25 @@ packages specific to each.
 
 ```
 presentation/            UI (Jetpack Compose) + MVVM
-  AppRootScreen.kt       Chooser between the image, cut-out, and video flows
-  editor/                Image editor          → README.image.md
+  AppRootScreen.kt       Chooser between the bulk-image, single-image, and video flows
+  editor/                Bulk image editor     → README.image.md
+  single/                Single-image hub (portrait + cut-out)
+  portrait/              Portrait color        → README.portrait.md
   cutout/                Single-image cut-out  → README.cutout.md
   video/                 Video editor          → README.video.md
   theme/                 Material 3 theme
 
 domain/                  Pure Kotlin — no Android types
   model/                 ImageOp (sealed) + Pipeline, watermark & export models,
-                         CutoutRenderSpec/BackgroundMode, video models
-  repository/            Image / Media / Cutout / Video repositories (abstractions)
-  usecase/               One use case per action (image + cut-out + video)
+                         CutoutRenderSpec/BackgroundMode, PortraitEffect, video models
+  repository/            Image / Media / Cutout / Portrait / Video repositories (abstractions)
+  usecase/               One use case per action (image + cut-out + portrait + video)
   util/                  Outcome<T> result type
 
 data/                    Framework implementations
   rendering/             Per-op image processors + PipelineRenderer + CutoutComposer
-  mlkit/                 SubjectSegmenter (ML Kit subject segmentation wrapper)
+                         + PortraitEffectProcessor + BitmapBlur
+  mlkit/                 SubjectSegmenter + PersonSegmenter (ML Kit wrappers)
   storage/               ImageStorage (decode/EXIF, cache, MediaStore, FileProvider)
   video/                 Video processing (see README.video.md)
   repository/            Repository implementations

@@ -79,6 +79,8 @@ dependencies {
 
     // ML Kit — on-device subject segmentation (cutout / background removal)
     implementation(libs.mlkit.segmentation.subject)
+    // ML Kit — bundled on-device person segmentation (portrait selective color)
+    implementation(libs.mlkit.segmentation.selfie)
 
     // Media3 (video editing + preview)
     implementation(libs.androidx.media3.transformer)

@@ -21,6 +21,7 @@ import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 /**
@@ -49,6 +50,63 @@ class ImageStorage @Inject constructor(
         val matrix = Matrix().apply { postRotate(rotation) }
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
             .also { rotated -> if (rotated != bitmap) bitmap.recycle() }
+    }
+
+    /**
+     * Decodes [uri] EXIF-corrected, **subsampling during the decode** so the
+     * full-resolution bitmap is never materialized. The result's long edge is
+     * roughly ≤ [maxLongEdge] (then fine-scaled to the exact cap). This bounds
+     * peak memory for large sources — use it instead of [decodeBitmap] when a
+     * working-size cap is known. Returns the image untouched if already smaller.
+     */
+    fun decodeBoundedBitmap(uri: Uri, maxLongEdge: Int): Bitmap {
+        // 1) Bounds-only decode to size the subsample.
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "Cannot open input stream for $uri" }
+            BitmapFactory.decodeStream(input, null, bounds)
+        }
+        check(bounds.outWidth > 0 && bounds.outHeight > 0) { "Couldn't read image bounds for $uri" }
+
+        // 2) Full decode with power-of-two subsampling to bound the allocation.
+        val options = BitmapFactory.Options().apply {
+            inSampleSize = sampleSizeFor(max(bounds.outWidth, bounds.outHeight), maxLongEdge)
+        }
+        val decoded = context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "Cannot open input stream for $uri" }
+            BitmapFactory.decodeStream(input, null, options)
+        } ?: error("Failed to decode image at $uri")
+
+        // 3) Apply EXIF rotation.
+        val rotation = readExifRotation(uri)
+        val oriented = if (rotation == 0f) {
+            decoded
+        } else {
+            val matrix = Matrix().apply { postRotate(rotation) }
+            Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+                .also { if (it != decoded) decoded.recycle() }
+        }
+
+        // 4) Fine-scale to the exact cap if subsampling left it larger.
+        val longEdge = max(oriented.width, oriented.height)
+        if (longEdge <= maxLongEdge) return oriented
+        val scale = maxLongEdge / longEdge.toFloat()
+        val scaled = Bitmap.createScaledBitmap(
+            oriented,
+            (oriented.width * scale).toInt().coerceAtLeast(1),
+            (oriented.height * scale).toInt().coerceAtLeast(1),
+            true,
+        )
+        if (scaled !== oriented) oriented.recycle()
+        return scaled
+    }
+
+    /** Largest power-of-two subsample that keeps the decoded long edge ≥ [maxLongEdge]. */
+    private fun sampleSizeFor(sourceLongEdge: Int, maxLongEdge: Int): Int {
+        if (maxLongEdge < 1) return 1
+        var sample = 1
+        while (sourceLongEdge / (sample * 2) >= maxLongEdge) sample *= 2
+        return sample
     }
 
     /**
