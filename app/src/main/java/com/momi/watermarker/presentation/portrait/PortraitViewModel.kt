@@ -1,13 +1,16 @@
 package com.momi.watermarker.presentation.portrait
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.momi.watermarker.R
 import com.momi.watermarker.domain.model.PortraitEffect
 import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.usecase.ApplyPortraitEffectUseCase
 import com.momi.watermarker.domain.usecase.SaveImageUseCase
 import com.momi.watermarker.domain.util.Outcome
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +31,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class PortraitViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val applyPortraitEffect: ApplyPortraitEffectUseCase,
     private val saveImage: SaveImageUseCase,
 ) : ViewModel() {
@@ -94,7 +98,7 @@ class PortraitViewModel @Inject constructor(
                 is Outcome.Failure -> {
                     if (_uiState.value.sourceUri != source) return@launch
                     _uiState.update { it.copy(isRendering = false) }
-                    emitMessage("Couldn't apply the effect: ${result.error.message}")
+                    emitMessage(R.string.error_apply_effect, result.error.message.orEmpty())
                 }
             }
         }
@@ -105,7 +109,7 @@ class PortraitViewModel @Inject constructor(
         val source = state.sourceUri
         val effect = state.effect
         if (source == null || effect == null || !state.canSave) {
-            emitMessage("Nothing to save yet.")
+            emitMessage(R.string.error_nothing_to_save)
             return
         }
         viewModelScope.launch {
@@ -116,16 +120,16 @@ class PortraitViewModel @Inject constructor(
                     when (val saved = saveImage(WatermarkImage(rendered.data), state.exportFormat)) {
                         is Outcome.Success -> {
                             _uiState.update { it.copy(isSaving = false, isSaved = true) }
-                            emitMessage("Saved to gallery ✓")
+                            emitMessage(R.string.saved_one_to_gallery)
                         }
                         is Outcome.Failure -> {
                             _uiState.update { it.copy(isSaving = false) }
-                            emitMessage("Save failed: ${saved.error.message}")
+                            emitMessage(R.string.error_save_failed, saved.error.message.orEmpty())
                         }
                     }
                 is Outcome.Failure -> {
                     _uiState.update { it.copy(isSaving = false) }
-                    emitMessage("Export failed: ${rendered.error.message}")
+                    emitMessage(R.string.error_export_failed, rendered.error.message.orEmpty())
                 }
             }
         }
@@ -137,6 +141,13 @@ class PortraitViewModel @Inject constructor(
 
     private fun emitMessage(message: String) {
         viewModelScope.launch { _effects.send(PortraitEvent.ShowMessage(message)) }
+    }
+
+    private fun emitMessage(resId: Int, vararg formatArgs: Any) {
+        emitMessage(
+            if (formatArgs.isEmpty()) appContext.getString(resId)
+            else appContext.getString(resId, *formatArgs),
+        )
     }
 
     private companion object {

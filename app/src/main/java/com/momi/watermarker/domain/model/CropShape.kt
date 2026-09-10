@@ -1,5 +1,7 @@
 package com.momi.watermarker.domain.model
 
+import androidx.annotation.StringRes
+import com.momi.watermarker.R
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -12,11 +14,11 @@ import kotlin.math.sin
  * made transparent, so a logo can be round, rounded, etc. The crop rectangle
  * remains the bounding box; the shape is inscribed within it.
  */
-enum class CropShape(val displayName: String) {
-    RECTANGLE("Rectangle"),
-    CIRCLE("Circle"),
-    ROUNDED("Rounded"),
-    SQUIRCLE("Squircle");
+enum class CropShape(@StringRes val labelRes: Int) {
+    RECTANGLE(R.string.crop_shape_rectangle),
+    CIRCLE(R.string.crop_shape_circle),
+    ROUNDED(R.string.crop_shape_rounded),
+    SQUIRCLE(R.string.crop_shape_squircle);
 
     companion object {
         val DEFAULT = RECTANGLE

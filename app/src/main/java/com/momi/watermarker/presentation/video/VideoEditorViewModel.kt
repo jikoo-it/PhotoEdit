@@ -1,7 +1,9 @@
 package com.momi.watermarker.presentation.video
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.momi.watermarker.R
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.OverlayPosition
@@ -20,6 +22,7 @@ import com.momi.watermarker.domain.usecase.RemoveAudioUseCase
 import com.momi.watermarker.domain.usecase.SaveVideoUseCase
 import com.momi.watermarker.domain.util.Outcome
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +38,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class VideoEditorViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val getVideoDuration: GetVideoDurationUseCase,
     private val cutAndJoin: CutAndJoinVideoUseCase,
     private val mergeVideos: MergeVideosUseCase,
@@ -86,7 +90,7 @@ class VideoEditorViewModel @Inject constructor(
                     )
                 }
                 is Outcome.Failure ->
-                    emitMessage("Couldn't read the video: ${result.error.message}")
+                    emitMessage(R.string.error_read_video, result.error.message.orEmpty())
             }
         }
     }
@@ -308,7 +312,7 @@ class VideoEditorViewModel @Inject constructor(
         val state = _uiState.value
         val op = state.op
         if (op == null || !state.canExport) {
-            emitMessage("Finish setting up the operation first.")
+            emitMessage(R.string.error_finish_setup)
             return
         }
         val source = state.primarySource
@@ -351,10 +355,14 @@ class VideoEditorViewModel @Inject constructor(
             when (edited) {
                 is Outcome.Success -> {
                     _uiState.update { it.copy(resultClip = edited.data) }
-                    emitMessage("${op.title} ready — preview below, then save.")
+                    emitMessage(R.string.op_ready_preview, appContext.getString(op.titleRes))
                 }
                 is Outcome.Failure ->
-                    emitMessage("${op.title} failed: ${edited.error.message}")
+                    emitMessage(
+                        R.string.op_failed,
+                        appContext.getString(op.titleRes),
+                        edited.error.message.orEmpty(),
+                    )
             }
             _uiState.update { it.copy(isExporting = false) }
         }
@@ -365,7 +373,7 @@ class VideoEditorViewModel @Inject constructor(
         val state = _uiState.value
         val result = state.resultClip
         if (result == null) {
-            emitMessage("Preview the result first.")
+            emitMessage(R.string.error_preview_first)
             return
         }
         val op = state.op
@@ -375,10 +383,10 @@ class VideoEditorViewModel @Inject constructor(
             when (val saved = saveVideo(result, name)) {
                 is Outcome.Success -> {
                     _uiState.update { it.copy(isSaved = true) }
-                    emitMessage("Saved to gallery ✓")
+                    emitMessage(R.string.saved_one_to_gallery)
                 }
                 is Outcome.Failure ->
-                    emitMessage("Save failed: ${saved.error.message}")
+                    emitMessage(R.string.error_save_failed, saved.error.message.orEmpty())
             }
             _uiState.update { it.copy(isSaving = false) }
         }
@@ -386,5 +394,12 @@ class VideoEditorViewModel @Inject constructor(
 
     private fun emitMessage(message: String) {
         viewModelScope.launch { _effects.send(VideoEditorEffect.ShowMessage(message)) }
+    }
+
+    private fun emitMessage(resId: Int, vararg formatArgs: Any) {
+        emitMessage(
+            if (formatArgs.isEmpty()) appContext.getString(resId)
+            else appContext.getString(resId, *formatArgs),
+        )
     }
 }

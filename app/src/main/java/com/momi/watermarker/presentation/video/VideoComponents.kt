@@ -12,7 +12,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import com.momi.watermarker.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
@@ -28,7 +30,7 @@ import androidx.media3.ui.PlayerView
 fun VideoPreview(
     uri: String?,
     modifier: Modifier = Modifier,
-    placeholder: String = "Choose a video to begin.",
+    placeholder: String? = null,
     autoPlay: Boolean = false,
 ) {
     val context = LocalContext.current
@@ -56,7 +58,7 @@ fun VideoPreview(
             )
         } else {
             Text(
-                text = placeholder,
+                text = placeholder ?: stringResource(R.string.choose_video_to_begin),
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(24.dp),
@@ -66,9 +68,10 @@ fun VideoPreview(
 }
 
 /** Formats a millisecond duration as `m:ss`. */
+@Composable
 fun formatMs(ms: Long): String {
     val totalSeconds = ms / 1000
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
+    return stringResource(R.string.duration_m_ss, minutes, seconds)
 }

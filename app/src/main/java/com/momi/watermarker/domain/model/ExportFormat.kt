@@ -1,5 +1,8 @@
 package com.momi.watermarker.domain.model
 
+import androidx.annotation.StringRes
+import com.momi.watermarker.R
+
 /**
  * The encoding used when writing a processed image out.
  *
@@ -7,14 +10,14 @@ package com.momi.watermarker.domain.model
  * applies); the data layer maps each value to its Android `CompressFormat`.
  */
 enum class ExportFormat(
-    val label: String,
+    @StringRes val labelRes: Int,
     val mimeType: String,
     val extension: String,
     val supportsQuality: Boolean,
 ) {
-    JPEG("JPEG", "image/jpeg", "jpg", supportsQuality = true),
-    PNG("PNG", "image/png", "png", supportsQuality = false),
-    WEBP("WebP", "image/webp", "webp", supportsQuality = true);
+    JPEG(R.string.export_format_jpeg, "image/jpeg", "jpg", supportsQuality = true),
+    PNG(R.string.export_format_png, "image/png", "png", supportsQuality = false),
+    WEBP(R.string.export_format_webp, "image/webp", "webp", supportsQuality = true);
 
     companion object {
         val DEFAULT = JPEG

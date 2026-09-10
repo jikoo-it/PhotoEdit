@@ -19,21 +19,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.annotation.StringRes
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.momi.watermarker.R
 import com.momi.watermarker.presentation.cutout.CutoutScreen
 import com.momi.watermarker.presentation.portrait.PortraitScreen
 
 /** The single-image tools available under this hub. */
-private enum class SingleImageTool(val title: String, val subtitle: String) {
-    PORTRAIT(
-        "Portrait Color",
-        "Keep the person in color, turn the background grayscale, optionally blur it",
-    ),
-    CUTOUT(
-        "Cut-out Studio",
-        "Remove or replace the background of one photo",
-    ),
+private enum class SingleImageTool(@StringRes val titleRes: Int, @StringRes val subtitleRes: Int) {
+    PORTRAIT(R.string.tool_portrait_title, R.string.tool_portrait_subtitle),
+    CUTOUT(R.string.tool_cutout_title, R.string.tool_cutout_subtitle),
 }
 
 /**
@@ -82,8 +79,8 @@ private fun SingleImageHub(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Single Image Processing") },
-                navigationIcon = { TextButton(onClick = onExit) { Text("‹ Back") } },
+                title = { Text(stringResource(R.string.section_single_image_title)) },
+                navigationIcon = { TextButton(onClick = onExit) { Text(stringResource(R.string.navigate_back)) } },
             )
         },
     ) { innerPadding ->
@@ -101,9 +98,9 @@ private fun SingleImageHub(
                         .clickable { onSelect(entry) },
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text(entry.title, style = MaterialTheme.typography.titleLarge)
+                        Text(stringResource(entry.titleRes), style = MaterialTheme.typography.titleLarge)
                         Text(
-                            entry.subtitle,
+                            stringResource(entry.subtitleRes),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

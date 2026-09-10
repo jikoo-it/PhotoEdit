@@ -1,5 +1,6 @@
 package com.momi.watermarker.presentation
 
+import android.content.Context
 import app.cash.turbine.test
 import com.momi.watermarker.MainDispatcherRule
 import com.momi.watermarker.domain.model.CropShape
@@ -21,6 +22,7 @@ import com.momi.watermarker.presentation.editor.EditorEffect
 import com.momi.watermarker.presentation.editor.EditorViewModel
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -38,6 +40,7 @@ class EditorViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
+    private val appContext = mockk<Context>(relaxed = true)
     private val applyPipeline = mockk<ApplyPipelineUseCase>()
     private val processAndSaveImages = mockk<ProcessAndSaveImagesUseCase>()
     private val createCaptureDestination = mockk<CreateCaptureDestinationUseCase>()
@@ -48,6 +51,8 @@ class EditorViewModelTest {
 
     @Before
     fun setUp() {
+        every { appContext.getString(any()) } returns ""
+        every { appContext.getString(any(), *anyVararg()) } returns ""
         // The image-info read and size estimate fire on every selection/preview;
         // give them defaults.
         coEvery { getImageInfo(any()) } returns Outcome.Success(ImageInfo(100, 100, 1_000L))
@@ -55,6 +60,7 @@ class EditorViewModelTest {
     }
 
     private fun viewModel() = EditorViewModel(
+        appContext = appContext,
         applyPipeline = applyPipeline,
         processAndSaveImages = processAndSaveImages,
         createCaptureDestination = createCaptureDestination,

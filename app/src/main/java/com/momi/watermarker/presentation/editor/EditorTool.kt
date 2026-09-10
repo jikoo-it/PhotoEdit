@@ -1,5 +1,8 @@
 package com.momi.watermarker.presentation.editor
 
+import androidx.annotation.StringRes
+import com.momi.watermarker.R
+
 /**
  * The editing tools shown in the editor's tool switcher. Each tool contributes
  * one [com.momi.watermarker.domain.model.ImageOp] (or, for [EXPORT], the encode
@@ -12,17 +15,17 @@ package com.momi.watermarker.presentation.editor
  * (e.g. cropping to a specific composition); those are hidden while more than
  * one image is selected.
  */
-enum class EditorTool(val label: String, val supportsBatch: Boolean = true) {
-    CROP("Crop", supportsBatch = false),
-    TRANSFORM("Transform"),
-    RESIZE("Resize"),
-    ASPECT("Aspect ratio"),
-    FILTER("Filters"),
-    ADJUST("Adjust"),
-    PIXELATE("Pixelate"),
-    FRAME("Frame"),
-    WATERMARK("Watermark"),
-    EXPORT("Export");
+enum class EditorTool(@StringRes val labelRes: Int, val supportsBatch: Boolean = true) {
+    CROP(R.string.tool_crop, supportsBatch = false),
+    TRANSFORM(R.string.tool_transform),
+    RESIZE(R.string.tool_resize),
+    ASPECT(R.string.tool_aspect),
+    FILTER(R.string.tool_filters),
+    ADJUST(R.string.tool_adjust),
+    PIXELATE(R.string.tool_pixelate),
+    FRAME(R.string.tool_frame),
+    WATERMARK(R.string.tool_watermark),
+    EXPORT(R.string.tool_export);
 
     companion object {
         val DEFAULT = WATERMARK

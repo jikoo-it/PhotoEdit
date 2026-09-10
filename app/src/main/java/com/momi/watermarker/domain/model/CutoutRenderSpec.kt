@@ -1,18 +1,21 @@
 package com.momi.watermarker.domain.model
 
+import androidx.annotation.StringRes
+import com.momi.watermarker.R
+
 /** What to place behind a cut-out subject. */
-enum class BackgroundMode(val label: String) {
+enum class BackgroundMode(@StringRes val labelRes: Int) {
     /** Keep only the subject; the background is fully transparent (exports as PNG). */
-    TRANSPARENT("Transparent"),
+    TRANSPARENT(R.string.background_mode_transparent),
 
     /** Fill the background with a single solid color. */
-    COLOR("Solid color"),
+    COLOR(R.string.background_mode_color),
 
     /** Keep the original photo behind the subject, but blurred (portrait look). */
-    BLUR("Blur original"),
+    BLUR(R.string.background_mode_blur),
 
     /** Replace the background with another picked image (cover-fit). */
-    IMAGE("Replace image"),
+    IMAGE(R.string.background_mode_image),
 }
 
 /**

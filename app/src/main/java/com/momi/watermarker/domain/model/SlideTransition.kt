@@ -1,5 +1,8 @@
 package com.momi.watermarker.domain.model
 
+import androidx.annotation.StringRes
+import com.momi.watermarker.R
+
 /**
  * A transition played at the boundary between two images in a slideshow.
  *
@@ -13,72 +16,72 @@ package com.momi.watermarker.domain.model
  *
  * Directional variants encode the direction the effect travels (← → ↑ ↓).
  */
-enum class SlideTransition(val label: String) {
+enum class SlideTransition(@StringRes val labelRes: Int) {
     /** Hard cut — no in-between frames. */
-    NONE("Cut"),
+    NONE(R.string.slide_transition_cut),
 
     /** Cross-dissolve: outgoing fades out as incoming fades in (both visible). */
-    DISSOLVE("Dissolve"),
+    DISSOLVE(R.string.slide_transition_dissolve),
 
     /** Dip through black, then back up into the incoming image. */
-    FADE_BLACK("Fade black"),
+    FADE_BLACK(R.string.slide_transition_fade_black),
 
     /** Dip through white, then back up into the incoming image. */
-    FADE_WHITE("Fade white"),
+    FADE_WHITE(R.string.slide_transition_fade_white),
 
     // Wipe: a hard edge sweeps across, revealing the incoming image.
-    WIPE_LEFT("Wipe ←"),
-    WIPE_RIGHT("Wipe →"),
-    WIPE_UP("Wipe ↑"),
-    WIPE_DOWN("Wipe ↓"),
+    WIPE_LEFT(R.string.slide_transition_wipe_left),
+    WIPE_RIGHT(R.string.slide_transition_wipe_right),
+    WIPE_UP(R.string.slide_transition_wipe_up),
+    WIPE_DOWN(R.string.slide_transition_wipe_down),
 
     // Push: both images move together; outgoing is pushed off as incoming enters.
-    SLIDE_LEFT("Push ←"),
-    SLIDE_RIGHT("Push →"),
-    SLIDE_UP("Push ↑"),
-    SLIDE_DOWN("Push ↓"),
+    SLIDE_LEFT(R.string.slide_transition_push_left),
+    SLIDE_RIGHT(R.string.slide_transition_push_right),
+    SLIDE_UP(R.string.slide_transition_push_up),
+    SLIDE_DOWN(R.string.slide_transition_push_down),
 
     // Cover: incoming slides in over a stationary outgoing image.
-    COVER_LEFT("Cover ←"),
-    COVER_RIGHT("Cover →"),
-    COVER_UP("Cover ↑"),
-    COVER_DOWN("Cover ↓"),
+    COVER_LEFT(R.string.slide_transition_cover_left),
+    COVER_RIGHT(R.string.slide_transition_cover_right),
+    COVER_UP(R.string.slide_transition_cover_up),
+    COVER_DOWN(R.string.slide_transition_cover_down),
 
     // Reveal: outgoing slides off to expose a stationary incoming image beneath.
-    REVEAL_LEFT("Reveal ←"),
-    REVEAL_RIGHT("Reveal →"),
-    REVEAL_UP("Reveal ↑"),
-    REVEAL_DOWN("Reveal ↓"),
+    REVEAL_LEFT(R.string.slide_transition_reveal_left),
+    REVEAL_RIGHT(R.string.slide_transition_reveal_right),
+    REVEAL_UP(R.string.slide_transition_reveal_up),
+    REVEAL_DOWN(R.string.slide_transition_reveal_down),
 
     /** Incoming grows from the centre over the outgoing image. */
-    ZOOM_IN("Zoom in"),
+    ZOOM_IN(R.string.slide_transition_zoom_in),
 
     /** Outgoing shrinks to the centre, revealing the incoming image. */
-    ZOOM_OUT("Zoom out"),
+    ZOOM_OUT(R.string.slide_transition_zoom_out),
 
     /** Circular reveal of the incoming image, expanding from the centre. */
-    IRIS_OPEN("Iris open"),
+    IRIS_OPEN(R.string.slide_transition_iris_open),
 
     /** Circular collapse of the outgoing image toward the centre. */
-    IRIS_CLOSE("Iris close"),
+    IRIS_CLOSE(R.string.slide_transition_iris_close),
 
     /** Horizontal blinds that fill in with the incoming image. */
-    BLINDS_H("Blinds ═"),
+    BLINDS_H(R.string.slide_transition_blinds_h),
 
     /** Vertical blinds that fill in with the incoming image. */
-    BLINDS_V("Blinds ║"),
+    BLINDS_V(R.string.slide_transition_blinds_v),
 
     /** Checkerboard of cells that flip to the incoming image. */
-    CHECKER("Checker"),
+    CHECKER(R.string.slide_transition_checker),
 
     /** Diagonal wipe sweeping from the top-left corner. */
-    WIPE_DIAG_TL("Wipe ◤"),
+    WIPE_DIAG_TL(R.string.slide_transition_wipe_diag_tl),
 
     /** Diagonal wipe sweeping from the top-right corner. */
-    WIPE_DIAG_TR("Wipe ◥"),
+    WIPE_DIAG_TR(R.string.slide_transition_wipe_diag_tr),
 
     /** Incoming rotates and fades in over the outgoing image. */
-    ROTATE("Rotate");
+    ROTATE(R.string.slide_transition_rotate);
 
     companion object {
         val DEFAULT = DISSOLVE

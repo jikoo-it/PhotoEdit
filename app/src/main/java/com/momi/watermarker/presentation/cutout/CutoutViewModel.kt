@@ -1,7 +1,9 @@
 package com.momi.watermarker.presentation.cutout
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.momi.watermarker.R
 import com.momi.watermarker.domain.model.BackgroundMode
 import com.momi.watermarker.domain.model.CutoutRenderSpec
 import com.momi.watermarker.domain.model.WatermarkImage
@@ -10,6 +12,7 @@ import com.momi.watermarker.domain.usecase.RenderCutoutUseCase
 import com.momi.watermarker.domain.usecase.SaveImageUseCase
 import com.momi.watermarker.domain.util.Outcome
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +29,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class CutoutViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val cutoutSubject: CutoutSubjectUseCase,
     private val renderCutout: RenderCutoutUseCase,
     private val saveImage: SaveImageUseCase,
@@ -58,7 +62,7 @@ class CutoutViewModel @Inject constructor(
                 }
                 is Outcome.Failure -> {
                     _uiState.update { it.copy(isSegmenting = false) }
-                    emitMessage("Couldn't cut out a subject: ${result.error.message}")
+                    emitMessage(R.string.error_cutout_subject, result.error.message.orEmpty())
                 }
             }
         }
@@ -117,7 +121,7 @@ class CutoutViewModel @Inject constructor(
                     _uiState.update { it.copy(resultUri = result.data, isRendering = false, isSaved = false) }
                 is Outcome.Failure -> {
                     _uiState.update { it.copy(isRendering = false) }
-                    emitMessage("Preview failed: ${result.error.message}")
+                    emitMessage(R.string.error_preview_failed, result.error.message.orEmpty())
                 }
             }
         }
@@ -127,7 +131,7 @@ class CutoutViewModel @Inject constructor(
         val state = _uiState.value
         val result = state.resultUri
         if (result == null || !state.canSave) {
-            emitMessage("Nothing to save yet.")
+            emitMessage(R.string.error_nothing_to_save)
             return
         }
         viewModelScope.launch {
@@ -135,11 +139,11 @@ class CutoutViewModel @Inject constructor(
             when (val saved = saveImage(WatermarkImage(result), state.exportFormat)) {
                 is Outcome.Success -> {
                     _uiState.update { it.copy(isSaving = false, isSaved = true) }
-                    emitMessage("Saved to gallery ✓")
+                    emitMessage(R.string.saved_one_to_gallery)
                 }
                 is Outcome.Failure -> {
                     _uiState.update { it.copy(isSaving = false) }
-                    emitMessage("Save failed: ${saved.error.message}")
+                    emitMessage(R.string.error_save_failed, saved.error.message.orEmpty())
                 }
             }
         }
@@ -151,6 +155,13 @@ class CutoutViewModel @Inject constructor(
 
     private fun emitMessage(message: String) {
         viewModelScope.launch { _effects.send(CutoutEffect.ShowMessage(message)) }
+    }
+
+    private fun emitMessage(resId: Int, vararg formatArgs: Any) {
+        emitMessage(
+            if (formatArgs.isEmpty()) appContext.getString(resId)
+            else appContext.getString(resId, *formatArgs),
+        )
     }
 }
 

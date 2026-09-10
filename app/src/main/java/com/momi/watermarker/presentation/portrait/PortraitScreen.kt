@@ -38,14 +38,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.momi.watermarker.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.momi.watermarker.presentation.theme.extraColors
 
 /**
  * Portrait "selective color + background blur" tool: the detected person(s) are
@@ -79,9 +81,9 @@ fun PortraitScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Portrait Color") },
+                title = { Text(stringResource(R.string.tool_portrait_title)) },
                 navigationIcon = {
-                    TextButton(onClick = onExit) { Text("‹ Back") }
+                    TextButton(onClick = onExit) { Text(stringResource(R.string.navigate_back)) }
                 },
             )
         },
@@ -107,41 +109,43 @@ fun PortraitScreen(
                 if (preview != null) {
                     AsyncImage(
                         model = preview,
-                        contentDescription = "Preview",
+                        contentDescription = stringResource(R.string.cd_preview),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
                     Text(
-                        "Pick a portrait to keep the person in color.",
+                        stringResource(R.string.portrait_empty_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (uiState.showOriginal && uiState.hasSource) {
+                    val extras = MaterialTheme.extraColors
                     Text(
-                        "Original",
+                        stringResource(R.string.label_original),
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(8.dp)
-                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                            .background(extras.overlayScrim.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
                             .padding(horizontal = 8.dp, vertical = 4.dp),
-                        color = Color.White,
+                        color = extras.overlayContent,
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
                 if (uiState.isRendering) {
+                    val extras = MaterialTheme.extraColors
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.35f)),
+                            .background(extras.overlayScrim.copy(alpha = 0.35f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = Color.White)
+                            CircularProgressIndicator(color = extras.overlayContent)
                             Text(
-                                "Isolating the person…",
-                                color = Color.White,
+                                stringResource(R.string.portrait_isolating),
+                                color = extras.overlayContent,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -156,22 +160,22 @@ fun PortraitScreen(
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (uiState.hasSource) "Choose a different photo" else "Choose a photo") }
+            ) { Text(stringResource(if (uiState.hasSource) R.string.action_choose_different_photo else R.string.action_choose_photo)) }
 
             // --- Controls (only once a photo is loaded) ------------------------
             if (uiState.hasSource) {
                 HorizontalDivider()
 
                 ToggleRow(
-                    label = "Selective color",
-                    description = "Keep the person in color, background grayscale",
+                    label = stringResource(R.string.portrait_selective_color),
+                    description = stringResource(R.string.portrait_selective_color_desc),
                     checked = uiState.selectiveColor,
                     onCheckedChange = viewModel::onSelectiveColorToggled,
                 )
 
                 ToggleRow(
-                    label = "Background blur",
-                    description = "Also Gaussian-blur the background",
+                    label = stringResource(R.string.portrait_background_blur),
+                    description = stringResource(R.string.portrait_background_blur_desc),
                     checked = uiState.backgroundBlur,
                     enabled = uiState.selectiveColor,
                     onCheckedChange = viewModel::onBackgroundBlurToggled,
@@ -179,7 +183,7 @@ fun PortraitScreen(
 
                 if (uiState.selectiveColor && uiState.backgroundBlur) {
                     Text(
-                        "Blur intensity: ${(uiState.blurStrength * 100).toInt()}%",
+                        stringResource(R.string.blur_intensity, (uiState.blurStrength * 100).toInt()),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Slider(
@@ -206,7 +210,7 @@ fun PortraitScreen(
                                 },
                             )
                         },
-                ) { Text("Hold to compare with original") }
+                ) { Text(stringResource(R.string.hold_to_compare)) }
 
                 // --- Save ------------------------------------------------------
                 HorizontalDivider()
@@ -218,15 +222,14 @@ fun PortraitScreen(
                     when {
                         uiState.isSaving -> {
                             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                            Text("  Saving…")
+                            Text(stringResource(R.string.action_saving))
                         }
-                        uiState.isSaved -> Text("Saved to gallery ✓")
-                        else -> Text("Save to gallery (${uiState.exportFormat.label})")
+                        uiState.isSaved -> Text(stringResource(R.string.action_saved_to_gallery))
+                        else -> Text(stringResource(R.string.save_to_gallery_format, stringResource(uiState.exportFormat.labelRes)))
                     }
                 }
                 Text(
-                    "Saved at full resolution. Works on any portrait — including " +
-                        "multiple people — using on-device person segmentation.",
+                    stringResource(R.string.portrait_save_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Start,

@@ -5,10 +5,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.momi.watermarker.presentation.AppRootScreen
 import com.momi.watermarker.presentation.theme.MomiWaterMarkerTheme
+import com.momi.watermarker.presentation.theme.ThemeViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 /** Single-activity host for the Compose UI (image + video flows). */
@@ -18,8 +23,14 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MomiWaterMarkerTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+            val themeViewModel: ThemeViewModel = hiltViewModel()
+            val themeMode by themeViewModel.themeMode.collectAsStateWithLifecycle()
+            MomiWaterMarkerTheme(themeMode = themeMode) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                ) {
                     AppRootScreen()
                 }
             }

@@ -1,7 +1,9 @@
 package com.momi.watermarker.presentation.editor
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.momi.watermarker.R
 import com.momi.watermarker.domain.model.AspectRatioPreset
 import com.momi.watermarker.domain.model.CompressionMode
 import com.momi.watermarker.domain.model.CropShape
@@ -27,6 +29,7 @@ import com.momi.watermarker.domain.usecase.GetWatermarkOptionsUseCase
 import com.momi.watermarker.domain.usecase.ProcessAndSaveImagesUseCase
 import com.momi.watermarker.domain.util.Outcome
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -45,6 +48,7 @@ import javax.inject.Inject
  */
 @HiltViewModel
 class EditorViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val applyPipeline: ApplyPipelineUseCase,
     private val processAndSaveImages: ProcessAndSaveImagesUseCase,
     private val createCaptureDestination: CreateCaptureDestinationUseCase,
@@ -111,7 +115,7 @@ class EditorViewModel @Inject constructor(
                 is Outcome.Success ->
                     _effects.send(EditorEffect.LaunchCamera(result.data.uri))
                 is Outcome.Failure ->
-                    emitMessage("Couldn't start the camera: ${result.error.message}")
+                    emitMessage(R.string.error_start_camera, result.error.message.orEmpty())
             }
         }
     }
@@ -385,7 +389,7 @@ class EditorViewModel @Inject constructor(
                 is Outcome.Success ->
                     updateConfig(tag = null) { it.copy(type = WatermarkType.IMAGE, imageUri = result.data.uri) }
                 is Outcome.Failure ->
-                    emitMessage("Couldn't crop image: ${result.error.message}")
+                    emitMessage(R.string.error_crop_image, result.error.message.orEmpty())
             }
         }
     }
@@ -401,7 +405,7 @@ class EditorViewModel @Inject constructor(
         val state = _uiState.value
         val sources = state.sourceImages
         if (sources.isEmpty()) {
-            emitMessage("Nothing to save yet.")
+            emitMessage(R.string.error_nothing_to_save)
             return
         }
         // An empty pipeline is fine — the images are re-encoded per the export
@@ -417,7 +421,11 @@ class EditorViewModel @Inject constructor(
 
             when {
                 !result.anySucceeded ->
-                    emitMessage("Save failed: ${result.errors.firstOrNull()?.message ?: "unknown error"}")
+                    emitMessage(
+                        R.string.error_save_failed,
+                        result.errors.firstOrNull()?.message
+                            ?: appContext.getString(R.string.error_unknown),
+                    )
                 // Only delete originals if every image was saved, so we never
                 // remove an original whose watermarked copy failed to save.
                 originals.isNotEmpty() && result.allSucceeded ->
@@ -440,16 +448,21 @@ class EditorViewModel @Inject constructor(
                     selectedImageInfo = null,
                 )
             }
-            emitMessage("Saved and removed originals ✓")
+            emitMessage(R.string.saved_and_removed_originals)
         } else {
-            emitMessage("Saved ✓ · originals kept")
+            emitMessage(R.string.saved_originals_kept)
         }
     }
 
     private fun savedMessage(result: BatchSaveResult): String = when {
-        result.requested == 1 -> "Saved to gallery ✓"
-        result.allSucceeded -> "Saved ${result.savedCount} images to gallery ✓"
-        else -> "Saved ${result.savedCount} of ${result.requested}; ${result.errors.size} failed"
+        result.requested == 1 -> appContext.getString(R.string.saved_one_to_gallery)
+        result.allSucceeded -> appContext.getString(R.string.saved_n_to_gallery, result.savedCount)
+        else -> appContext.getString(
+            R.string.saved_partial,
+            result.savedCount,
+            result.requested,
+            result.errors.size,
+        )
     }
 
     private fun updateConfig(tag: String?, transform: (WatermarkConfig) -> WatermarkConfig) =
@@ -581,7 +594,7 @@ class EditorViewModel @Inject constructor(
                     _uiState.update { it.copy(previewImage = result.data, isRendering = false) }
                 is Outcome.Failure ->
                     _uiState.update { it.copy(isRendering = false) }
-                        .also { emitMessage("Preview failed: ${result.error.message}") }
+                        .also { emitMessage(R.string.error_preview_failed, result.error.message.orEmpty()) }
             }
             refreshShownImageInfo()
             refreshExportEstimate()
@@ -642,6 +655,13 @@ class EditorViewModel @Inject constructor(
 
     private fun emitMessage(message: String) {
         viewModelScope.launch { _effects.send(EditorEffect.ShowMessage(message)) }
+    }
+
+    private fun emitMessage(resId: Int, vararg formatArgs: Any) {
+        emitMessage(
+            if (formatArgs.isEmpty()) appContext.getString(resId)
+            else appContext.getString(resId, *formatArgs),
+        )
     }
 
     private companion object {

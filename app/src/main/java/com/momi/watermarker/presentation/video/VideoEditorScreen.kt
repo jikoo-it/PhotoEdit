@@ -54,8 +54,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.momi.watermarker.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -97,11 +99,11 @@ fun VideoEditorScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text(op?.title ?: "Momi Video") },
+                title = { Text(stringResource(op?.titleRes ?: R.string.video_home_title)) },
                 navigationIcon = {
                     TextButton(
                         onClick = { if (op != null) viewModel.onBack() else onExit() },
-                    ) { Text("‹ Back") }
+                    ) { Text(stringResource(R.string.navigate_back)) }
                 },
             )
         },
@@ -138,7 +140,7 @@ private fun VideoHome(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "Choose an operation",
+            text = stringResource(R.string.choose_an_operation),
             style = MaterialTheme.typography.titleMedium,
         )
         VideoOp.entries.forEach { op ->
@@ -148,9 +150,9 @@ private fun VideoHome(
                     .clickable { onOpSelected(op) },
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text(op.title, style = MaterialTheme.typography.titleMedium)
+                    Text(stringResource(op.titleRes), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        op.subtitle,
+                        stringResource(op.subtitleRes),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -203,10 +205,10 @@ private fun OperationContent(
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(16.dp)),
-                placeholder = when (op) {
-                    VideoOp.MERGE -> "Pick videos to merge."
-                    else -> "Choose a video to begin."
-                },
+                placeholder = stringResource(
+                    if (op == VideoOp.MERGE) R.string.pick_videos_to_merge
+                    else R.string.choose_video_to_begin,
+                ),
             )
 
             // --- Source picking -----------------------------------------------
@@ -218,7 +220,7 @@ private fun OperationContent(
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(if (uiState.hasVideo) "Pick different videos" else "Pick videos") }
+                ) { Text(stringResource(if (uiState.hasVideo) R.string.pick_different_videos else R.string.pick_videos)) }
             } else {
                 OutlinedButton(
                     onClick = {
@@ -227,7 +229,7 @@ private fun OperationContent(
                         )
                     },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text(if (uiState.hasVideo) "Choose a different video" else "Choose a video") }
+                ) { Text(stringResource(if (uiState.hasVideo) R.string.choose_different_video else R.string.choose_a_video)) }
             }
         }
 
@@ -243,7 +245,7 @@ private fun OperationContent(
 
             VideoOp.REMOVE_AUDIO -> if (uiState.hasVideo) {
                 Text(
-                    "The exported video will have no audio track.",
+                    stringResource(R.string.remove_audio_hint),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -295,9 +297,9 @@ private fun OperationContent(
         ) {
             if (uiState.isExporting) {
                 CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                Text("  Processing…")
+                Text(stringResource(R.string.action_processing))
             } else {
-                Text("Apply ${op.title} & preview")
+                Text(stringResource(R.string.apply_op_and_preview, stringResource(op.titleRes)))
             }
         }
 
@@ -306,7 +308,7 @@ private fun OperationContent(
         if (result != null) {
             HorizontalDivider()
             Text(
-                "Result — preview before saving",
+                stringResource(R.string.result_preview_title),
                 style = MaterialTheme.typography.titleMedium,
             )
             VideoPreview(
@@ -325,10 +327,10 @@ private fun OperationContent(
                 when {
                     uiState.isSaving -> {
                         CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                        Text("  Saving…")
+                        Text(stringResource(R.string.action_saving))
                     }
-                    uiState.isSaved -> Text("Saved to gallery ✓")
-                    else -> Text("Save to gallery")
+                    uiState.isSaved -> Text(stringResource(R.string.action_saved_to_gallery))
+                    else -> Text(stringResource(R.string.action_save_to_gallery))
                 }
             }
         }
@@ -338,7 +340,7 @@ private fun OperationContent(
         overlayCropUri?.let { uri ->
             ImageCropperScreen(
                 imageUri = uri,
-                title = "Crop overlay",
+                title = stringResource(R.string.crop_overlay),
                 onConfirm = { rect, shape ->
                     viewModel.onOverlayCropChanged(rect, shape)
                     overlayCropUri = null
@@ -356,20 +358,20 @@ private fun CutJoinControls(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            "Segments to keep (joined in order):",
+            stringResource(R.string.segments_to_keep),
             style = MaterialTheme.typography.bodyMedium,
         )
         uiState.keepRanges.forEachIndexed { index, range ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "#${index + 1}: ${formatMs(range.startMs)} – ${formatMs(range.endMs)}",
+                        stringResource(R.string.segment_range, index + 1, formatMs(range.startMs), formatMs(range.endMs)),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f),
                     )
                     if (uiState.keepRanges.size > 1) {
                         TextButton(onClick = { viewModel.onRemoveKeepRange(index) }) {
-                            Text("Remove")
+                            Text(stringResource(R.string.action_remove))
                         }
                     }
                 }
@@ -381,7 +383,7 @@ private fun CutJoinControls(
                     valueRange = 0f..uiState.durationMs.toFloat(),
                 )
                 Text(
-                    "Speed: ${"%.2f".format(range.speed)}×",
+                    stringResource(R.string.speed_value, range.speed),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Slider(
@@ -392,7 +394,7 @@ private fun CutJoinControls(
                 HorizontalDivider()
             }
         }
-        TextButton(onClick = viewModel::onAddKeepRange) { Text("+ Add segment") }
+        TextButton(onClick = viewModel::onAddKeepRange) { Text(stringResource(R.string.add_segment)) }
     }
 }
 
@@ -404,25 +406,25 @@ private fun MergeList(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            "${uiState.sources.size} videos — played top to bottom:",
+            stringResource(R.string.merge_videos_count, uiState.sources.size),
             style = MaterialTheme.typography.bodyMedium,
         )
         uiState.sources.forEachIndexed { index, _ ->
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${index + 1}. Clip ${index + 1}",
+                        stringResource(R.string.clip_n, index + 1, index + 1),
                         modifier = Modifier.weight(1f),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     TextButton(
                         onClick = { viewModel.onReorderSource(index, index - 1) },
                         enabled = index > 0,
-                    ) { Text("↑") }
+                    ) { Text(stringResource(R.string.move_up)) }
                     TextButton(
                         onClick = { viewModel.onReorderSource(index, index + 1) },
                         enabled = index < uiState.sources.lastIndex,
-                    ) { Text("↓") }
+                    ) { Text(stringResource(R.string.move_down)) }
                 }
                 // Per-clip reframe: "Original" keeps this clip's own ratio.
                 Row(
@@ -434,7 +436,7 @@ private fun MergeList(
                         FilterChip(
                             selected = option == selected,
                             onClick = { viewModel.onMergeAspectChanged(index, option) },
-                            label = { Text(option.label) },
+                            label = { Text(stringResource(option.labelRes)) },
                         )
                     }
                 }
@@ -451,13 +453,13 @@ private fun AspectRatioControls(
     onSelect: (AspectRatioOption) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Target aspect ratio:", style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.target_aspect_ratio), style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             AspectRatioOption.entries.forEach { option ->
                 FilterChip(
                     selected = option == selected,
                     onClick = { onSelect(option) },
-                    label = { Text(option.label) },
+                    label = { Text(stringResource(option.labelRes)) },
                 )
             }
         }
@@ -471,7 +473,7 @@ private fun FilterControls(
     onSelect: (VideoColorFilter) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text("Color look:", style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.color_look), style = MaterialTheme.typography.bodyMedium)
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -480,7 +482,7 @@ private fun FilterControls(
                 FilterChip(
                     selected = filter == selected,
                     onClick = { onSelect(filter) },
-                    label = { Text(filter.label) },
+                    label = { Text(stringResource(filter.labelRes)) },
                 )
             }
         }
@@ -495,12 +497,11 @@ private fun SlideshowControls(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedButton(onClick = onPickImages, modifier = Modifier.fillMaxWidth()) {
-            Text(if (uiState.slides.isEmpty()) "Pick images" else "Pick different images")
+            Text(stringResource(if (uiState.slides.isEmpty()) R.string.pick_images else R.string.pick_different_images))
         }
         if (uiState.slides.isEmpty()) {
             Text(
-                "Pick two or more photos. Set how long each one shows and the " +
-                    "transition played between them — every transition can differ.",
+                stringResource(R.string.slideshow_empty_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -514,7 +515,7 @@ private fun SlideshowControls(
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                "Transition length: ${"%.1f".format(uiState.transitionDurationMs / 1000f)}s",
+                stringResource(R.string.transition_length, uiState.transitionDurationMs / 1000f),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Slider(
@@ -562,24 +563,24 @@ private fun SlideRow(
             )
             Spacer(Modifier.width(12.dp))
             Text(
-                "Image ${index + 1}",
+                stringResource(R.string.slide_image_n, index + 1),
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.bodyMedium,
             )
             TextButton(
                 onClick = { viewModel.onReorderSlide(index, index - 1) },
                 enabled = index > 0,
-            ) { Text("↑") }
+            ) { Text(stringResource(R.string.move_up)) }
             TextButton(
                 onClick = { viewModel.onReorderSlide(index, index + 1) },
                 enabled = index < slideCount - 1,
-            ) { Text("↓") }
+            ) { Text(stringResource(R.string.move_down)) }
             if (slideCount > 2) {
-                TextButton(onClick = { viewModel.onRemoveSlide(index) }) { Text("Remove") }
+                TextButton(onClick = { viewModel.onRemoveSlide(index) }) { Text(stringResource(R.string.action_remove)) }
             }
         }
         Text(
-            "Shows for ${"%.1f".format(slide.durationMs / 1000f)}s",
+            stringResource(R.string.slide_shows_for, slide.durationMs / 1000f),
             style = MaterialTheme.typography.bodySmall,
         )
         Slider(
@@ -598,7 +599,7 @@ private fun TransitionRow(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            "↕ transition to next image",
+            stringResource(R.string.transition_to_next),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -610,7 +611,7 @@ private fun TransitionRow(
                 FilterChip(
                     selected = transition == selected,
                     onClick = { onSelect(transition) },
-                    label = { Text(transition.label) },
+                    label = { Text(stringResource(transition.labelRes)) },
                 )
             }
         }
@@ -635,7 +636,7 @@ private fun OverlayControls(
                     onClick = { viewModel.onOverlayModeChanged(mode) },
                     shape = SegmentedButtonDefaults.itemShape(index, OverlayMode.entries.size),
                 ) {
-                    Text(if (mode == OverlayMode.IMAGE) "Image" else "Text")
+                    Text(stringResource(if (mode == OverlayMode.IMAGE) R.string.label_image else R.string.label_text))
                 }
             }
         }
@@ -643,23 +644,23 @@ private fun OverlayControls(
         when (uiState.overlayMode) {
             OverlayMode.IMAGE -> {
                 OutlinedButton(onClick = onPickImage, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (uiState.overlayUri != null) "Choose a different image" else "Choose overlay image")
+                    Text(stringResource(if (uiState.overlayUri != null) R.string.choose_different_image else R.string.choose_overlay_image))
                 }
                 if (uiState.overlayUri != null) {
                     AsyncImage(
                         model = uiState.overlayUri,
-                        contentDescription = "Overlay image",
+                        contentDescription = stringResource(R.string.cd_overlay_image),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .size(96.dp)
                             .clip(RoundedCornerShape(8.dp)),
                     )
                     OutlinedButton(onClick = onCropImage, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (uiState.overlayCropRect != null) "Adjust crop" else "Crop overlay")
+                        Text(stringResource(if (uiState.overlayCropRect != null) R.string.adjust_crop_plain else R.string.crop_overlay_plain))
                     }
                     if (uiState.overlayCropRect != null) {
                         TextButton(onClick = viewModel::onOverlayCropCleared) {
-                            Text("Reset crop")
+                            Text(stringResource(R.string.action_reset_crop))
                         }
                     }
                 }
@@ -669,12 +670,12 @@ private fun OverlayControls(
                 OutlinedTextField(
                     value = uiState.overlayText,
                     onValueChange = viewModel::onOverlayTextChanged,
-                    label = { Text("Overlay text") },
+                    label = { Text(stringResource(R.string.overlay_text)) },
                     minLines = 1,
                     maxLines = 3,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Text("Text color", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.label_text_color), style = MaterialTheme.typography.bodyMedium)
                 OverlayColorRow(
                     selectedArgb = uiState.overlayTextColorArgb,
                     onSelect = viewModel::onOverlayTextColorChanged,
@@ -689,15 +690,19 @@ private fun OverlayControls(
         }
         if (hasOverlay) {
             HorizontalDivider()
-            Text("Position", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.label_position), style = MaterialTheme.typography.bodyMedium)
             OverlayPositionGrid(
                 selected = uiState.overlayPosition,
                 onSelect = viewModel::onOverlayPositionChanged,
             )
 
-            val sizeLabel = if (uiState.overlayMode == OverlayMode.TEXT) "Text size" else "Size"
+            val sizeLabel = stringResource(if (uiState.overlayMode == OverlayMode.TEXT) R.string.label_text_size else R.string.label_size)
             Text(
-                "$sizeLabel: ${(uiState.overlaySizeFraction * 100).toInt()}% of frame",
+                stringResource(
+                    R.string.overlay_size_of_frame,
+                    sizeLabel,
+                    (uiState.overlaySizeFraction * 100).toInt(),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Slider(
@@ -708,7 +713,7 @@ private fun OverlayControls(
             )
 
             Text(
-                "Opacity: ${(uiState.overlayAlpha * 100).toInt()}%",
+                stringResource(R.string.opacity_percent, (uiState.overlayAlpha * 100).toInt()),
                 style = MaterialTheme.typography.bodyMedium,
             )
             Slider(
@@ -769,7 +774,7 @@ private fun OverlayPositionGrid(
                         onClick = { onSelect(pos) },
                         label = {
                             Text(
-                                pos.label,
+                                stringResource(pos.labelRes),
                                 style = MaterialTheme.typography.labelSmall,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth(),

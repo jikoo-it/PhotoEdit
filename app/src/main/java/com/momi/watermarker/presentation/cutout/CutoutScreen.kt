@@ -46,11 +46,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.momi.watermarker.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.momi.watermarker.domain.model.BackgroundMode
+import com.momi.watermarker.presentation.theme.extraColors
 
 /**
  * Single-image "cut-out studio": extract the subject on-device, then place it
@@ -87,9 +90,9 @@ fun CutoutScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Cut-out Studio") },
+                title = { Text(stringResource(R.string.tool_cutout_title)) },
                 navigationIcon = {
-                    TextButton(onClick = onExit) { Text("‹ Back") }
+                    TextButton(onClick = onExit) { Text(stringResource(R.string.navigate_back)) }
                 },
             )
         },
@@ -115,29 +118,30 @@ fun CutoutScreen(
                 if (preview != null) {
                     AsyncImage(
                         model = preview,
-                        contentDescription = "Preview",
+                        contentDescription = stringResource(R.string.cd_preview),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
                     Text(
-                        "Pick a photo to cut out its subject.",
+                        stringResource(R.string.cutout_empty_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (uiState.isBusy) {
+                    val extras = MaterialTheme.extraColors
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.35f)),
+                            .background(extras.overlayScrim.copy(alpha = 0.35f)),
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(color = Color.White)
+                            CircularProgressIndicator(color = extras.overlayContent)
                             Text(
-                                if (uiState.isSegmenting) "Finding the subject…" else "Rendering…",
-                                color = Color.White,
+                                stringResource(if (uiState.isSegmenting) R.string.cutout_finding_subject else R.string.cutout_rendering),
+                                color = extras.overlayContent,
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
@@ -152,12 +156,12 @@ fun CutoutScreen(
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (uiState.hasSource) "Choose a different photo" else "Choose a photo") }
+            ) { Text(stringResource(if (uiState.hasSource) R.string.action_choose_different_photo else R.string.action_choose_photo)) }
 
             // --- Background controls (only once a subject exists) --------------
             if (uiState.hasCutout) {
                 HorizontalDivider()
-                Text("Background", style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.label_background), style = MaterialTheme.typography.titleMedium)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
@@ -166,21 +170,20 @@ fun CutoutScreen(
                         FilterChip(
                             selected = uiState.mode == mode,
                             onClick = { viewModel.onModeSelected(mode) },
-                            label = { Text(mode.label) },
+                            label = { Text(stringResource(mode.labelRes)) },
                         )
                     }
                 }
 
                 when (uiState.mode) {
                     BackgroundMode.TRANSPARENT -> Text(
-                        "Only the subject is kept; the background is transparent " +
-                            "(saved as PNG).",
+                        stringResource(R.string.cutout_transparent_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
 
                     BackgroundMode.COLOR -> {
-                        Text("Fill color", style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.label_fill_color), style = MaterialTheme.typography.bodyMedium)
                         ColorSwatchRow(
                             selectedArgb = uiState.backgroundColorArgb,
                             onSelect = viewModel::onColorSelected,
@@ -189,7 +192,7 @@ fun CutoutScreen(
 
                     BackgroundMode.BLUR -> {
                         Text(
-                            "Blur: ${(uiState.blurStrength * 100).toInt()}%",
+                            stringResource(R.string.blur_percent, (uiState.blurStrength * 100).toInt()),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                         Slider(
@@ -212,14 +215,16 @@ fun CutoutScreen(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
-                                if (uiState.backgroundImageUri != null) "Choose a different background"
-                                else "Choose background image",
+                                stringResource(
+                                    if (uiState.backgroundImageUri != null) R.string.choose_different_background
+                                    else R.string.choose_background_image,
+                                ),
                             )
                         }
                         if (uiState.backgroundImageUri != null) {
                             AsyncImage(
                                 model = uiState.backgroundImageUri,
-                                contentDescription = "Background",
+                                contentDescription = stringResource(R.string.cd_background),
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
                                     .size(96.dp)
@@ -239,10 +244,10 @@ fun CutoutScreen(
                     when {
                         uiState.isSaving -> {
                             CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                            Text("  Saving…")
+                            Text(stringResource(R.string.action_saving))
                         }
-                        uiState.isSaved -> Text("Saved to gallery ✓")
-                        else -> Text("Save to gallery (${uiState.exportFormat.label})")
+                        uiState.isSaved -> Text(stringResource(R.string.action_saved_to_gallery))
+                        else -> Text(stringResource(R.string.save_to_gallery_format, stringResource(uiState.exportFormat.labelRes)))
                     }
                 }
             }
@@ -287,24 +292,26 @@ private fun ColorSwatchRow(selectedArgb: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-/** Draws a light checkerboard so transparent regions of the preview read clearly. */
-private fun Modifier.checkerboard(
-    cell: Float = 24f,
-    light: Color = Color(0xFFECECEC),
-    dark: Color = Color(0xFFCFCFCF),
-): Modifier = this
-    .background(light)
-    .drawBehind {
-        val cols = (size.width / cell).toInt() + 1
-        val rows = (size.height / cell).toInt() + 1
-        for (row in 0 until rows) {
-            for (col in 0 until cols) {
-                if ((row + col) % 2 == 0) continue
-                drawRect(
-                    color = dark,
-                    topLeft = Offset(col * cell, row * cell),
-                    size = Size(cell, cell),
-                )
+/** Draws a checkerboard from theme surface colors so transparent regions read clearly. */
+@Composable
+private fun Modifier.checkerboard(cell: Float = 24f): Modifier {
+    val extras = MaterialTheme.extraColors
+    val light = extras.checkerLight
+    val dark = extras.checkerDark
+    return this
+        .background(light)
+        .drawBehind {
+            val cols = (size.width / cell).toInt() + 1
+            val rows = (size.height / cell).toInt() + 1
+            for (row in 0 until rows) {
+                for (col in 0 until cols) {
+                    if ((row + col) % 2 == 0) continue
+                    drawRect(
+                        color = dark,
+                        topLeft = Offset(col * cell, row * cell),
+                        size = Size(cell, cell),
+                    )
+                }
             }
         }
-    }
+}

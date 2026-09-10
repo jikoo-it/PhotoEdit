@@ -26,6 +26,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,19 +46,21 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ClipOp
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.momi.watermarker.R
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.squircleUnitPoints
+import com.momi.watermarker.presentation.theme.extraColors
 import kotlin.math.min
 
 /**
@@ -73,7 +76,7 @@ fun ImageCropperScreen(
     imageUri: String,
     onConfirm: (NormalizedRect, CropShape) -> Unit,
     onCancel: () -> Unit,
-    title: String = "Crop watermark",
+    title: String = stringResource(R.string.crop_watermark),
     /**
      * When false, the shape picker is hidden and the crop is always a plain
      * rectangle — used for cropping the main photo, where a masked (transparent)
@@ -81,7 +84,8 @@ fun ImageCropperScreen(
      */
     showShapeSelector: Boolean = true,
 ) {
-    Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
+    val extras = MaterialTheme.extraColors
+    Surface(modifier = Modifier.fillMaxSize(), color = extras.immersiveBackground) {
         val painter = rememberAsyncImagePainter(model = imageUri)
         val state = painter.state
 
@@ -104,19 +108,20 @@ fun ImageCropperScreen(
                 ),
         ) {
             TopAppBar(
-                // The bar sits on a black Surface, so force a transparent
-                // container and light content — the default surface-colored bar
-                // would render white-on-white in a light theme.
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = Color.White,
-                    navigationIconContentColor = Color.White,
-                    actionIconContentColor = Color.White,
+                    containerColor = extras.immersiveBackground,
+                    titleContentColor = extras.immersiveOnBackground,
+                    navigationIconContentColor = extras.immersiveOnBackground,
+                    actionIconContentColor = extras.immersiveOnBackground,
                 ),
-                title = { Text(title, color = Color.White) },
+                title = { Text(title, color = extras.immersiveOnBackground) },
                 navigationIcon = {
                     IconButton(onClick = onCancel) {
-                        Icon(Icons.Filled.Close, contentDescription = "Cancel", tint = Color.White)
+                        Icon(
+                            Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.action_cancel),
+                            tint = extras.immersiveOnBackground,
+                        )
                     }
                 },
                 actions = {
@@ -130,7 +135,7 @@ fun ImageCropperScreen(
                             }
                         },
                     ) {
-                        Text("Done", color = Color.White)
+                        Text(stringResource(R.string.action_done), color = extras.immersiveOnBackground)
                     }
                 },
             )
@@ -152,7 +157,7 @@ fun ImageCropperScreen(
                 // it is drawn.
                 Image(
                     painter = painter,
-                    contentDescription = "Image to crop",
+                    contentDescription = stringResource(R.string.cd_image_to_crop),
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
                 )
@@ -184,6 +189,8 @@ fun ImageCropperScreen(
                             )
                         }
 
+                        val dim = extras.overlayScrim.copy(alpha = 0.55f)
+                        val guide = extras.cropGuide
                         Canvas(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -210,31 +217,30 @@ fun ImageCropperScreen(
                             val outline = cropOutline(shape, crop)
 
                             // Dim everything outside the crop shape.
-                            val dim = Color.Black.copy(alpha = 0.55f)
                             clipPath(outline, clipOp = ClipOp.Difference) {
                                 drawRect(dim, topLeft = Offset(0f, 0f), size = size)
                             }
 
                             // Shape border + corner handles (at the bounding box).
-                            drawPath(outline, color = Color.White, style = Stroke(width = 2.dp.toPx()))
+                            drawPath(outline, color = guide, style = Stroke(width = 2.dp.toPx()))
                             val r = 8.dp.toPx()
                             listOf(
                                 Offset(crop.left, crop.top),
                                 Offset(crop.right, crop.top),
                                 Offset(crop.left, crop.bottom),
                                 Offset(crop.right, crop.bottom),
-                            ).forEach { corner -> drawCircle(Color.White, radius = r, center = corner) }
+                            ).forEach { corner -> drawCircle(guide, radius = r, center = corner) }
                         }
                     }
 
                     state is AsyncImagePainter.State.Error -> Text(
-                        "Couldn't load image.",
-                        color = Color.White,
+                        stringResource(R.string.crop_load_failed),
+                        color = extras.immersiveOnBackground,
                         modifier = Modifier.align(Alignment.Center),
                     )
 
                     else -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = Color.White)
+                        CircularProgressIndicator(color = extras.immersiveOnBackground)
                     }
                 }
             }
@@ -249,6 +255,7 @@ fun ImageCropperScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ShapeSelector(selected: CropShape, onSelect: (CropShape) -> Unit) {
+    val extras = MaterialTheme.extraColors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -260,17 +267,16 @@ private fun ShapeSelector(selected: CropShape, onSelect: (CropShape) -> Unit) {
             FilterChip(
                 selected = option == selected,
                 onClick = { onSelect(option) },
-                label = { Text(option.displayName) },
-                // Readable on the black crop surface.
+                label = { Text(stringResource(option.labelRes)) },
                 colors = FilterChipDefaults.filterChipColors(
-                    labelColor = Color.White,
-                    selectedContainerColor = Color.White,
-                    selectedLabelColor = Color.Black,
+                    labelColor = extras.immersiveOnBackground,
+                    selectedContainerColor = extras.immersiveOnBackground,
+                    selectedLabelColor = extras.immersiveBackground,
                 ),
                 border = FilterChipDefaults.filterChipBorder(
                     enabled = true,
                     selected = option == selected,
-                    borderColor = Color.White.copy(alpha = 0.6f),
+                    borderColor = extras.immersiveOnBackground.copy(alpha = 0.6f),
                 ),
             )
         }

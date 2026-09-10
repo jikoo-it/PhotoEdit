@@ -88,10 +88,12 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import com.momi.watermarker.R
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -114,6 +116,7 @@ import com.momi.watermarker.presentation.editor.components.ImageCropperScreen
 import com.momi.watermarker.presentation.editor.components.OptionChipRow
 import com.momi.watermarker.presentation.editor.components.PercentSlider
 import com.momi.watermarker.presentation.editor.components.RgbColorPicker
+import com.momi.watermarker.presentation.theme.extraColors
 
 /** Predefined watermark colors offered to the user. */
 private val PRESET_COLORS = listOf(
@@ -216,14 +219,14 @@ fun EditorScreen(
             snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
-                    title = { Text("MomiWaterMarker") },
+                    title = { Text(stringResource(R.string.editor_title)) },
                     actions = {
                         if (uiState.hasImage) {
                             IconButton(onClick = viewModel::onUndo, enabled = uiState.canUndo) {
-                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
+                                Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = stringResource(R.string.action_undo))
                             }
                             IconButton(onClick = viewModel::onRedo, enabled = uiState.canRedo) {
-                                Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo")
+                                Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = stringResource(R.string.action_redo))
                             }
                         }
                         if (uiState.isSaving) {
@@ -236,7 +239,7 @@ fun EditorScreen(
                                 onClick = ::startSave,
                                 enabled = uiState.canSave,
                             ) {
-                                Icon(Icons.Filled.Save, contentDescription = "Save to gallery")
+                                Icon(Icons.Filled.Save, contentDescription = stringResource(R.string.action_save_to_gallery))
                             }
                         }
                     },
@@ -278,7 +281,7 @@ fun EditorScreen(
                         )
                         if (uiState.hasMultipleImages) {
                             Text(
-                                text = "Edits apply to all ${uiState.imageCount} images.",
+                                text = stringResource(R.string.edits_apply_to_all, uiState.imageCount),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -357,7 +360,7 @@ fun EditorScreen(
                                 modifier = Modifier.align(Alignment.End),
                             ) {
                                 Icon(Icons.Filled.RestartAlt, contentDescription = null)
-                                Text("  Reset all edits")
+                                Text(stringResource(R.string.action_reset_all_edits))
                             }
                         }
 
@@ -368,8 +371,8 @@ fun EditorScreen(
                         ) {
                             Icon(Icons.Filled.Save, contentDescription = null)
                             Text(
-                                if (uiState.hasMultipleImages) "  Save ${uiState.imageCount} images"
-                                else "  Save to gallery"
+                                if (uiState.hasMultipleImages) stringResource(R.string.action_save_n_images, uiState.imageCount)
+                                else stringResource(R.string.action_save_to_gallery_spaced)
                             )
                         }
                         }
@@ -394,7 +397,7 @@ fun EditorScreen(
         mainCropUri?.let { uri ->
             ImageCropperScreen(
                 imageUri = uri,
-                title = "Crop photo",
+                title = stringResource(R.string.crop_photo),
                 showShapeSelector = true,
                 onConfirm = { rect, shape ->
                     viewModel.onCropChanged(rect, shape)
@@ -529,7 +532,7 @@ private fun PreviewPage(
     ) {
         AsyncImage(
             model = imageUri,
-            contentDescription = "Preview (tap to view full screen)",
+            contentDescription = stringResource(R.string.cd_preview_tap_fullscreen),
             // Fit shows the whole image without cropping it.
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),
@@ -540,7 +543,7 @@ private fun PreviewPage(
         // Remove-this-image button.
         Icon(
             imageVector = Icons.Filled.Cancel,
-            contentDescription = "Remove image",
+            contentDescription = stringResource(R.string.cd_remove_image),
             tint = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -553,15 +556,16 @@ private fun PreviewPage(
         )
         // Dimensions / file-size badge in the corner.
         info?.let {
+            val extras = MaterialTheme.extraColors
             Text(
                 text = formatImageInfo(it, sizeBytes),
                 style = MaterialTheme.typography.labelSmall,
-                color = Color.White,
+                color = extras.overlayContent,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(8.dp)
                     .clip(RoundedCornerShape(6.dp))
-                    .background(Color.Black.copy(alpha = 0.55f))
+                    .background(extras.overlayScrim.copy(alpha = 0.55f))
                     .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
@@ -583,12 +587,12 @@ private fun AddPage(onAdd: () -> Unit, hasImages: Boolean) {
         ) {
             Icon(
                 imageVector = Icons.Filled.Add,
-                contentDescription = "Add images",
+                contentDescription = stringResource(R.string.cd_add_images),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(48.dp),
             )
             Text(
-                text = if (hasImages) "Add more images" else "Add images to begin",
+                text = stringResource(if (hasImages) R.string.add_more_images else R.string.add_images_to_begin),
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -597,16 +601,20 @@ private fun AddPage(onAdd: () -> Unit, hasImages: Boolean) {
 }
 
 /** "1024 × 768 · 245 KB" — dimensions from [info] and (when known) the [sizeBytes] file size. */
+@Composable
 private fun formatImageInfo(info: ImageInfo, sizeBytes: Long?): String {
-    val dimensions = "${info.width} × ${info.height}"
-    val size = sizeBytes?.let { " · ${formatBytes(it)}" } ?: ""
-    return dimensions + size
+    return if (sizeBytes != null) {
+        stringResource(R.string.image_info_with_size, info.width, info.height, formatBytes(sizeBytes))
+    } else {
+        stringResource(R.string.image_info_dimensions, info.width, info.height)
+    }
 }
 
+@Composable
 private fun formatBytes(bytes: Long): String = when {
-    bytes >= 1_000_000 -> "%.1f MB".format(bytes / 1_000_000.0)
-    bytes >= 1_000 -> "${bytes / 1_000} KB"
-    else -> "$bytes B"
+    bytes >= 1_000_000 -> stringResource(R.string.size_mb, bytes / 1_000_000.0)
+    bytes >= 1_000 -> stringResource(R.string.size_kb, bytes / 1_000)
+    else -> stringResource(R.string.size_bytes, bytes)
 }
 
 /**
@@ -623,31 +631,32 @@ private fun FullScreenPager(
         initialPage = initialIndex,
         pageCount = { images.size },
     )
+    val extras = MaterialTheme.extraColors
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(extras.immersiveBackground),
         contentAlignment = Alignment.Center,
     ) {
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             AsyncImage(
                 model = images[page].uri,
-                contentDescription = "Full-screen preview ${page + 1}",
+                contentDescription = stringResource(R.string.cd_fullscreen_preview, page + 1),
                 contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxSize(),
             )
         }
         if (images.size > 1) {
             Text(
-                text = "${pagerState.currentPage + 1} / ${images.size}",
+                text = stringResource(R.string.pager_position, pagerState.currentPage + 1, images.size),
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
+                color = extras.overlayContent,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
                     .padding(16.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.55f))
+                    .background(extras.overlayScrim.copy(alpha = 0.55f))
                     .padding(horizontal = 12.dp, vertical = 6.dp),
             )
         }
@@ -658,7 +667,11 @@ private fun FullScreenPager(
                 .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(8.dp),
         ) {
-            Icon(Icons.Filled.Close, contentDescription = "Close", tint = Color.White)
+            Icon(
+                Icons.Filled.Close,
+                contentDescription = stringResource(R.string.action_close),
+                tint = extras.immersiveOnBackground,
+            )
         }
     }
 }
@@ -674,12 +687,12 @@ private fun AddSourceSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             ListItem(
-                headlineContent = { Text("Take a photo") },
+                headlineContent = { Text(stringResource(R.string.take_a_photo)) },
                 leadingContent = { Icon(Icons.Filled.PhotoCamera, contentDescription = null) },
                 modifier = Modifier.clickable(onClick = onTakePhoto),
             )
             ListItem(
-                headlineContent = { Text("Choose from gallery") },
+                headlineContent = { Text(stringResource(R.string.choose_from_gallery)) },
                 leadingContent = { Icon(Icons.Filled.PhotoLibrary, contentDescription = null) },
                 modifier = Modifier.clickable(onClick = onPickGallery),
             )
@@ -705,7 +718,7 @@ private fun WatermarkControls(
                     onClick = { viewModel.onWatermarkTypeSelected(type) },
                     shape = SegmentedButtonDefaults.itemShape(index, WatermarkType.entries.size),
                 ) {
-                    Text(type.displayName)
+                    Text(stringResource(type.labelRes))
                 }
             }
         }
@@ -715,22 +728,22 @@ private fun WatermarkControls(
                 OutlinedTextField(
                     value = config.text,
                     onValueChange = viewModel::onTextChanged,
-                    label = { Text("Watermark text") },
-                    supportingText = { Text("Press Enter for a new line") },
+                    label = { Text(stringResource(R.string.watermark_text)) },
+                    supportingText = { Text(stringResource(R.string.watermark_text_hint)) },
                     minLines = 1,
                     maxLines = 4,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                ControlLabel("Font")
+                ControlLabel(stringResource(R.string.label_font))
                 OptionChipRow(
                     options = state.availableFonts,
                     selected = config.font,
-                    labelOf = { it.displayName },
+                    labelOf = { stringResource(it.labelRes) },
                     onSelected = viewModel::onFontSelected,
                 )
 
-                ControlLabel("Color")
+                ControlLabel(stringResource(R.string.label_color))
                 ColorSwatchRow(
                     colors = PRESET_COLORS,
                     selectedArgb = config.colorArgb,
@@ -738,7 +751,7 @@ private fun WatermarkControls(
                 )
 
                 PercentSlider(
-                    label = "Text size",
+                    label = stringResource(R.string.label_text_size),
                     value = config.textSizeRatio,
                     onValueChange = viewModel::onTextSizeChanged,
                     valueRange = 0.02f..0.2f,
@@ -748,13 +761,13 @@ private fun WatermarkControls(
             WatermarkType.IMAGE -> {
                 OutlinedButton(onClick = onPickWatermarkImage, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Filled.Image, contentDescription = null)
-                    Text(if (config.hasImageWatermark) "  Change watermark image" else "  Choose watermark image")
+                    Text(stringResource(if (config.hasImageWatermark) R.string.change_watermark_image else R.string.choose_watermark_image))
                 }
 
                 config.imageUri?.let { uri ->
                     AsyncImage(
                         model = uri,
-                        contentDescription = "Chosen watermark",
+                        contentDescription = stringResource(R.string.cd_chosen_watermark),
                         contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .size(96.dp)
@@ -769,7 +782,7 @@ private fun WatermarkControls(
                 }
 
                 PercentSlider(
-                    label = "Watermark size",
+                    label = stringResource(R.string.label_watermark_size),
                     value = config.imageSizeRatio,
                     onValueChange = viewModel::onImageSizeChanged,
                     valueRange = 0.05f..0.8f,
@@ -778,24 +791,24 @@ private fun WatermarkControls(
         }
 
         // Shared controls (apply to both text and image watermarks).
-        ControlLabel("Pattern")
+        ControlLabel(stringResource(R.string.label_pattern))
         OptionChipRow(
             options = state.availablePatterns,
             selected = config.pattern,
-            labelOf = { it.displayName },
+            labelOf = { stringResource(it.labelRes) },
             onSelected = viewModel::onPatternSelected,
         )
 
         // Spacing only affects the repeated (tiled/diagonal) layouts.
         if (config.pattern == WatermarkPattern.TILED || config.pattern == WatermarkPattern.DIAGONAL) {
             PercentSlider(
-                label = "Item spacing",
+                label = stringResource(R.string.label_item_spacing),
                 value = config.tileSpacingRatio,
                 onValueChange = viewModel::onTileSpacingChanged,
                 valueRange = 0f..3f,
             )
             PercentSlider(
-                label = "Line spacing",
+                label = stringResource(R.string.label_line_spacing),
                 value = config.lineSpacingRatio,
                 onValueChange = viewModel::onLineSpacingChanged,
                 valueRange = 0f..3f,
@@ -803,7 +816,7 @@ private fun WatermarkControls(
         }
 
         PercentSlider(
-            label = "Opacity",
+            label = stringResource(R.string.label_opacity),
             value = config.opacity,
             onValueChange = viewModel::onOpacityChanged,
         )
@@ -821,21 +834,26 @@ private fun CropControls(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedButton(onClick = onStartCrop, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Filled.Crop, contentDescription = null)
-            Text(if (cropped) "  Adjust crop" else "  Crop photo")
+            Text(stringResource(if (cropped) R.string.adjust_crop else R.string.crop_photo_button))
         }
 
         Text(
             text = if (cropped) {
                 val r = state.crop.rect
-                val shapeNote = if (state.crop.shape != CropShape.RECTANGLE) {
-                    " · ${state.crop.shape.displayName} shape"
+                val w = (r.width * 100).toInt()
+                val h = (r.height * 100).toInt()
+                if (state.crop.shape != CropShape.RECTANGLE) {
+                    stringResource(
+                        R.string.crop_applied_shaped,
+                        w,
+                        h,
+                        stringResource(state.crop.shape.labelRes),
+                    )
                 } else {
-                    ""
+                    stringResource(R.string.crop_applied, w, h)
                 }
-                "Cropped to ${(r.width * 100).toInt()}% × ${(r.height * 100).toInt()}% " +
-                    "of the original$shapeNote."
             } else {
-                "Tap to open the cropper. Choose any shape; the same crop is applied to every image."
+                stringResource(R.string.crop_hint)
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -845,19 +863,19 @@ private fun CropControls(
         // rectangular, so let the user pick whether the masked area is left
         // transparent (a cut-out) or filled with a solid color.
         if (state.crop.shape != CropShape.RECTANGLE) {
-            ControlLabel("Masked area")
+            ControlLabel(stringResource(R.string.label_masked_area))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = state.crop.backgroundArgb == null,
                     onClick = { viewModel.onCropBackgroundChanged(null) },
-                    label = { Text("Transparent") },
+                    label = { Text(stringResource(R.string.label_transparent)) },
                 )
                 FilterChip(
                     selected = state.crop.backgroundArgb != null,
                     onClick = {
                         viewModel.onCropBackgroundChanged(state.crop.backgroundArgb ?: WHITE_ARGB)
                     },
-                    label = { Text("Fill color") },
+                    label = { Text(stringResource(R.string.label_fill_color)) },
                 )
             }
             state.crop.backgroundArgb?.let { bg ->
@@ -870,7 +888,7 @@ private fun CropControls(
         }
 
         if (cropped) {
-            TextButton(onClick = viewModel::onResetCrop) { Text("Reset crop") }
+            TextButton(onClick = viewModel::onResetCrop) { Text(stringResource(R.string.action_reset_crop)) }
         }
     }
 }
@@ -883,34 +901,34 @@ private fun TransformControls(
     val transform = state.transform
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ControlLabel("Rotate & flip")
+        ControlLabel(stringResource(R.string.label_rotate_flip))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = viewModel::onRotateClockwise, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Filled.RotateRight, contentDescription = null)
-                Text("  Rotate")
+                Text(stringResource(R.string.action_rotate))
             }
             OutlinedButton(onClick = viewModel::onFlipHorizontal, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Filled.Flip, contentDescription = null)
-                Text("  Flip H")
+                Text(stringResource(R.string.action_flip_h))
             }
             OutlinedButton(onClick = viewModel::onFlipVertical, modifier = Modifier.weight(1f)) {
                 Icon(Icons.Filled.Flip, contentDescription = null)
-                Text("  Flip V")
+                Text(stringResource(R.string.action_flip_v))
             }
         }
 
         Text(
             text = buildString {
-                append("Rotation ${transform.rotationDegrees}°")
-                if (transform.flipHorizontal) append(" · flipped horizontally")
-                if (transform.flipVertical) append(" · flipped vertically")
+                append(stringResource(R.string.transform_rotation, transform.rotationDegrees))
+                if (transform.flipHorizontal) append(stringResource(R.string.transform_flipped_h))
+                if (transform.flipVertical) append(stringResource(R.string.transform_flipped_v))
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         if (!transform.isIdentity) {
-            TextButton(onClick = viewModel::onResetTransform) { Text("Reset transform") }
+            TextButton(onClick = viewModel::onResetTransform) { Text(stringResource(R.string.action_reset_transform)) }
         }
     }
 }
@@ -931,7 +949,7 @@ private fun ResizeControls(
                     onClick = { viewModel.onResizeModeSelected(mode) },
                     shape = SegmentedButtonDefaults.itemShape(index, ResizeMode.entries.size),
                 ) {
-                    Text(mode.label)
+                    Text(stringResource(mode.labelRes))
                 }
             }
         }
@@ -939,20 +957,19 @@ private fun ResizeControls(
         when (resize.mode) {
             ResizeMode.PERCENT -> {
                 PercentSlider(
-                    label = "Scale",
+                    label = stringResource(R.string.label_scale),
                     value = resize.percent,
                     onValueChange = viewModel::onResizePercentChanged,
                     valueRange = 0.05f..4f,
                 )
                 Text(
-                    text = "Below 100% shrinks the image; above 100% enlarges it " +
-                        "(e.g. 200% turns 512×512 into 1024×1024).",
+                    text = stringResource(R.string.resize_percent_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             ResizeMode.LONGEST_SIDE -> {
-                ControlLabel("Longest side")
+                ControlLabel(stringResource(R.string.label_longest_side))
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     MAX_DIMENSION_PRESETS.forEachIndexed { index, px ->
                         SegmentedButton(
@@ -965,8 +982,7 @@ private fun ResizeControls(
                     }
                 }
                 Text(
-                    text = "Images larger than ${resize.maxDimensionPx}px on their longest " +
-                        "side are scaled down; smaller ones are left as-is.",
+                    text = stringResource(R.string.resize_max_hint, resize.maxDimensionPx),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -974,7 +990,7 @@ private fun ResizeControls(
         }
 
         if (!resize.isIdentity) {
-            TextButton(onClick = viewModel::onResetResize) { Text("Reset to full size") }
+            TextButton(onClick = viewModel::onResetResize) { Text(stringResource(R.string.action_reset_to_full_size)) }
         }
     }
 }
@@ -988,36 +1004,35 @@ private fun AspectControls(
     val padded = !aspectPad.isIdentity
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ControlLabel("Aspect ratio")
+        ControlLabel(stringResource(R.string.label_aspect_ratio))
         OptionChipRow(
             options = AspectRatioPreset.entries,
             selected = aspectPad.preset,
-            labelOf = { it.label },
+            labelOf = { stringResource(it.labelRes) },
             onSelected = viewModel::onAspectPresetSelected,
         )
 
         Text(
-            text = "Adds bars (letterboxing) to reach the chosen ratio — nothing is " +
-                "cropped. \"Original\" keeps the image's own ratio.",
+            text = stringResource(R.string.aspect_pad_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         // The added bars can be transparent (a cut-out on export) or a solid fill.
         if (padded) {
-            ControlLabel("Bars")
+            ControlLabel(stringResource(R.string.label_bars))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = aspectPad.fillArgb == null,
                     onClick = { viewModel.onAspectFillChanged(null) },
-                    label = { Text("Transparent") },
+                    label = { Text(stringResource(R.string.label_transparent)) },
                 )
                 FilterChip(
                     selected = aspectPad.fillArgb != null,
                     onClick = {
                         viewModel.onAspectFillChanged(aspectPad.fillArgb ?: WHITE_ARGB)
                     },
-                    label = { Text("Fill color") },
+                    label = { Text(stringResource(R.string.label_fill_color)) },
                 )
             }
             aspectPad.fillArgb?.let { fill ->
@@ -1028,7 +1043,7 @@ private fun AspectControls(
                 )
             }
 
-            TextButton(onClick = viewModel::onResetAspect) { Text("Reset aspect ratio") }
+            TextButton(onClick = viewModel::onResetAspect) { Text(stringResource(R.string.action_reset_aspect)) }
         }
     }
 }
@@ -1042,7 +1057,7 @@ private fun ExportControls(
     val export = state.exportOptions
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ControlLabel("Format")
+        ControlLabel(stringResource(R.string.label_format))
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             ExportFormat.entries.forEachIndexed { index, format ->
                 SegmentedButton(
@@ -1050,13 +1065,13 @@ private fun ExportControls(
                     onClick = { viewModel.onExportFormatSelected(format) },
                     shape = SegmentedButtonDefaults.itemShape(index, ExportFormat.entries.size),
                 ) {
-                    Text(format.label)
+                    Text(stringResource(format.labelRes))
                 }
             }
         }
 
         if (export.format.supportsQuality) {
-            ControlLabel("Compression")
+            ControlLabel(stringResource(R.string.label_compression))
             SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                 CompressionMode.entries.forEachIndexed { index, mode ->
                     SegmentedButton(
@@ -1064,27 +1079,27 @@ private fun ExportControls(
                         onClick = { viewModel.onCompressionModeSelected(mode) },
                         shape = SegmentedButtonDefaults.itemShape(index, CompressionMode.entries.size),
                     ) {
-                        Text(if (mode == CompressionMode.QUALITY) "Quality" else "Target size")
+                        Text(stringResource(if (mode == CompressionMode.QUALITY) R.string.compression_quality else R.string.compression_target_size))
                     }
                 }
             }
 
             when (export.mode) {
                 CompressionMode.QUALITY -> {
-                    ControlLabel("Quality: ${export.quality}")
+                    ControlLabel(stringResource(R.string.label_quality_value, export.quality))
                     Slider(
                         value = export.quality.toFloat(),
                         onValueChange = { viewModel.onExportQualityChanged(it.toInt()) },
                         valueRange = 10f..100f,
                     )
                     Text(
-                        text = "Lower quality means smaller files.",
+                        text = stringResource(R.string.quality_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 CompressionMode.TARGET_SIZE -> {
-                    ControlLabel("Target size")
+                    ControlLabel(stringResource(R.string.label_target_size))
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         ExportOptions.TARGET_SIZE_PRESETS.forEachIndexed { index, bytes ->
                             SegmentedButton(
@@ -1100,7 +1115,7 @@ private fun ExportControls(
                         }
                     }
                     Text(
-                        text = "Quality is chosen automatically to fit within the target size.",
+                        text = stringResource(R.string.target_size_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1108,7 +1123,7 @@ private fun ExportControls(
             }
         } else {
             Text(
-                text = "${export.format.label} is lossless; quality doesn't apply.",
+                text = stringResource(R.string.format_lossless, stringResource(export.format.labelRes)),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1116,7 +1131,7 @@ private fun ExportControls(
 
         state.estimatedExportSize?.let { estimate ->
             Text(
-                text = "Estimated size of the shown image: ${formatBytes(estimate)}",
+                text = stringResource(R.string.estimated_export_size, formatBytes(estimate)),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -1132,7 +1147,7 @@ private fun FilterControls(
     val filter = state.filter
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ControlLabel("Filter")
+        ControlLabel(stringResource(R.string.label_filter))
         // Presets plus a "Custom" pill in one scrollable row; exactly one is
         // selected at a time (a preset, or the custom color tint).
         Row(
@@ -1143,7 +1158,7 @@ private fun FilterControls(
                 FilterChip(
                     selected = !filter.hasCustomTint && filter.filter == preset,
                     onClick = { viewModel.onFilterSelected(preset) },
-                    label = { Text(preset.label) },
+                    label = { Text(stringResource(preset.labelRes)) },
                 )
             }
             FilterChip(
@@ -1151,14 +1166,14 @@ private fun FilterControls(
                 onClick = {
                     viewModel.onCustomTintChanged(filter.customTintArgb ?: DEFAULT_CUSTOM_TINT)
                 },
-                label = { Text("Custom") },
+                label = { Text(stringResource(R.string.filter_custom)) },
             )
         }
 
         // The RGB sliders appear only once the custom pill is selected.
         if (filter.hasCustomTint) {
             Text(
-                text = "Pick any color to wash the image with it.",
+                text = stringResource(R.string.custom_tint_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1167,7 +1182,7 @@ private fun FilterControls(
                 onColorChanged = viewModel::onCustomTintChanged,
             )
             TextButton(onClick = { viewModel.onFilterSelected(PhotoFilter.NONE) }) {
-                Text("Remove color tint")
+                Text(stringResource(R.string.remove_color_tint))
             }
         }
     }
@@ -1181,13 +1196,13 @@ private fun AdjustControls(
     val adjust = state.adjust
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SignedSlider("Brightness", adjust.brightness, viewModel::onBrightnessChanged)
-        SignedSlider("Contrast", adjust.contrast, viewModel::onContrastChanged)
-        SignedSlider("Saturation", adjust.saturation, viewModel::onSaturationChanged)
-        SignedSlider("Warmth", adjust.warmth, viewModel::onWarmthChanged)
+        SignedSlider(stringResource(R.string.adjust_brightness), adjust.brightness, viewModel::onBrightnessChanged)
+        SignedSlider(stringResource(R.string.adjust_contrast), adjust.contrast, viewModel::onContrastChanged)
+        SignedSlider(stringResource(R.string.adjust_saturation), adjust.saturation, viewModel::onSaturationChanged)
+        SignedSlider(stringResource(R.string.adjust_warmth), adjust.warmth, viewModel::onWarmthChanged)
 
         if (!adjust.isIdentity) {
-            TextButton(onClick = viewModel::onResetAdjust) { Text("Reset adjustments") }
+            TextButton(onClick = viewModel::onResetAdjust) { Text(stringResource(R.string.action_reset_adjustments)) }
         }
     }
 }
@@ -1201,7 +1216,8 @@ private fun PixelateControls(
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         ControlLabel(
-            if (state.pixelate.isIdentity) "Block size: off" else "Block size: $block px"
+            if (state.pixelate.isIdentity) stringResource(R.string.pixelate_off)
+            else stringResource(R.string.pixelate_block_size, block)
         )
         Slider(
             value = block.toFloat(),
@@ -1209,13 +1225,13 @@ private fun PixelateControls(
             valueRange = 1f..64f,
         )
         Text(
-            text = "Larger blocks give a coarser mosaic. Slide to 1 to turn the effect off.",
+            text = stringResource(R.string.pixelate_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         if (!state.pixelate.isIdentity) {
-            TextButton(onClick = viewModel::onResetPixelate) { Text("Turn off pixelate") }
+            TextButton(onClick = viewModel::onResetPixelate) { Text(stringResource(R.string.action_turn_off_pixelate)) }
         }
     }
 }
@@ -1228,17 +1244,17 @@ private fun FrameControls(
     val frame = state.frame
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        ControlLabel("Style")
+        ControlLabel(stringResource(R.string.label_style))
         OptionChipRow(
             options = FrameStyle.entries,
             selected = frame.style,
-            labelOf = { it.label },
+            labelOf = { stringResource(it.labelRes) },
             onSelected = viewModel::onFrameStyleSelected,
         )
 
         if (frame.style != FrameStyle.NONE) {
             PercentSlider(
-                label = if (frame.style == FrameStyle.SHADOW) "Shadow margin" else "Frame width",
+                label = stringResource(if (frame.style == FrameStyle.SHADOW) R.string.label_shadow_margin else R.string.label_frame_width),
                 value = frame.widthRatio,
                 onValueChange = viewModel::onFrameWidthChanged,
                 valueRange = 0.01f..0.25f,
@@ -1248,17 +1264,17 @@ private fun FrameControls(
             // styles let the user choose a fill color or make the area outside
             // the photo see-through.
             if (frame.style != FrameStyle.ROUNDED) {
-                ControlLabel("Background")
+                ControlLabel(stringResource(R.string.label_background))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = !frame.transparentBackground,
                         onClick = { viewModel.onFrameTransparentChanged(false) },
-                        label = { Text("Fill color") },
+                        label = { Text(stringResource(R.string.label_fill_color)) },
                     )
                     FilterChip(
                         selected = frame.transparentBackground,
                         onClick = { viewModel.onFrameTransparentChanged(true) },
-                        label = { Text("Transparent") },
+                        label = { Text(stringResource(R.string.label_transparent)) },
                     )
                 }
                 if (!frame.transparentBackground) {
@@ -1272,17 +1288,17 @@ private fun FrameControls(
 
             if (frame.style == FrameStyle.ROUNDED) {
                 PercentSlider(
-                    label = "Corner radius",
+                    label = stringResource(R.string.label_corner_radius),
                     value = frame.cornerRadiusRatio,
                     onValueChange = viewModel::onFrameCornerRadiusChanged,
                     valueRange = 0f..0.5f,
                 )
             }
 
-            TextButton(onClick = viewModel::onResetFrame) { Text("Remove frame") }
+            TextButton(onClick = viewModel::onResetFrame) { Text(stringResource(R.string.action_remove_frame)) }
         } else {
             Text(
-                text = "Pick a style to frame every image in the batch.",
+                text = stringResource(R.string.frame_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1299,7 +1315,7 @@ private fun SignedSlider(
 ) {
     val percent = (value * 100).toInt()
     Column {
-        ControlLabel("$label: ${if (percent > 0) "+$percent" else "$percent"}")
+        ControlLabel(stringResource(R.string.signed_percent_label, label, if (percent > 0) stringResource(R.string.signed_percent_positive, percent) else stringResource(R.string.signed_percent_value, percent)))
         Slider(
             value = value,
             onValueChange = onValueChange,
@@ -1337,7 +1353,7 @@ private fun ToolSwitcher(
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = tool.label,
+                    text = stringResource(tool.labelRes),
                     style = MaterialTheme.typography.labelMedium,
                     color = if (isSelected) MaterialTheme.colorScheme.onSecondaryContainer
                     else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1369,22 +1385,21 @@ private fun SaveOptionsDialog(
     onDeleteOriginals: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val originalWord = if (imageCount > 1) "originals" else "original"
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Save watermarked ${if (imageCount > 1) "images" else "image"}") },
+        title = { Text(pluralStringResource(R.plurals.save_watermarked_title, imageCount, imageCount)) },
         text = {
-            Text(
-                "Keep the $originalWord in your gallery, or delete " +
-                    "${if (imageCount > 1) "them" else "it"} and keep only the watermarked " +
-                    "${if (imageCount > 1) "copies" else "copy"}?"
-            )
+            Text(pluralStringResource(R.plurals.save_options_message, imageCount, imageCount))
         },
         confirmButton = {
-            TextButton(onClick = onDeleteOriginals) { Text("Delete $originalWord") }
+            TextButton(onClick = onDeleteOriginals) {
+                Text(pluralStringResource(R.plurals.delete_originals, imageCount, imageCount))
+            }
         },
         dismissButton = {
-            TextButton(onClick = onKeepOriginals) { Text("Keep $originalWord") }
+            TextButton(onClick = onKeepOriginals) {
+                Text(pluralStringResource(R.plurals.keep_originals, imageCount, imageCount))
+            }
         },
     )
 }

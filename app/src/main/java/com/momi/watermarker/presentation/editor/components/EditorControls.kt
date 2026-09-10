@@ -24,7 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.momi.watermarker.R
+import com.momi.watermarker.presentation.theme.extraColors
 import kotlin.math.roundToInt
 
 /** A horizontally-scrolling, single-select chip row backed by a generic list. */
@@ -32,7 +35,7 @@ import kotlin.math.roundToInt
 fun <T> OptionChipRow(
     options: List<T>,
     selected: T?,
-    labelOf: (T) -> String,
+    labelOf: @Composable (T) -> String,
     onSelected: (T) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -81,10 +84,11 @@ fun ColorSwatchRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (isSelected) {
+                    val extras = MaterialTheme.extraColors
                     Icon(
                         imageVector = Icons.Filled.Check,
                         contentDescription = null,
-                        tint = if (color.luminance() > 0.5f) Color.Black else Color.White,
+                        tint = if (color.luminance() > 0.5f) extras.onLightSwatch else extras.onDarkSwatch,
                     )
                 }
             }
@@ -123,13 +127,13 @@ fun RgbColorPicker(
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
             ) {}
             Text(
-                text = "RGB($r, $g, $b)",
+                text = stringResource(R.string.rgb_value, r, g, b),
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-        ChannelSlider("R", r) { onColorChanged(argb(it, g, b)) }
-        ChannelSlider("G", g) { onColorChanged(argb(r, it, b)) }
-        ChannelSlider("B", b) { onColorChanged(argb(r, g, it)) }
+        ChannelSlider(stringResource(R.string.channel_r), r) { onColorChanged(argb(it, g, b)) }
+        ChannelSlider(stringResource(R.string.channel_g), g) { onColorChanged(argb(r, it, b)) }
+        ChannelSlider(stringResource(R.string.channel_b), b) { onColorChanged(argb(r, g, it)) }
     }
 }
 
@@ -138,7 +142,7 @@ fun RgbColorPicker(
 private fun ChannelSlider(label: String, value: Int, onValueChange: (Int) -> Unit) {
     Column {
         Text(
-            text = "$label — $value",
+            text = stringResource(R.string.channel_value, label, value),
             style = MaterialTheme.typography.labelLarge,
         )
         Slider(
@@ -160,7 +164,7 @@ fun PercentSlider(
 ) {
     Column(modifier = modifier.padding(vertical = 4.dp)) {
         Text(
-            text = "$label — ${(value * 100).roundToInt()}%",
+            text = stringResource(R.string.percent_with_label, label, (value * 100).roundToInt()),
             style = MaterialTheme.typography.labelLarge,
         )
         Slider(value = value, onValueChange = onValueChange, valueRange = valueRange)

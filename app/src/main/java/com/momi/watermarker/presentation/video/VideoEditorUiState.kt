@@ -1,5 +1,8 @@
 package com.momi.watermarker.presentation.video
 
+import androidx.annotation.StringRes
+import com.momi.watermarker.R
+
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.OverlayPosition
@@ -12,14 +15,14 @@ import com.momi.watermarker.domain.model.VideoColorFilter
  * The editing operations offered on the video home screen. Each is a distinct,
  * self-contained flow that funnels into the same export pipeline.
  */
-enum class VideoOp(val title: String, val subtitle: String) {
-    CUT_JOIN("Trim / Cut & Join", "Keep one section, or several stitched together"),
-    MERGE("Merge", "Join multiple videos into one"),
-    REMOVE_AUDIO("Remove Sound", "Strip the audio track"),
-    ASPECT_RATIO("Aspect Ratio", "Reframe to 16:9, 1:1, 9:16…"),
-    FILTER("Color Filter", "Apply a look: B&W, invert, warm/cool…"),
-    OVERLAY("Image Overlay", "Stamp a logo or image onto the video"),
-    SLIDESHOW("Images to Video", "Turn photos into a video with per-image timing and transitions"),
+enum class VideoOp(@StringRes val titleRes: Int, @StringRes val subtitleRes: Int) {
+    CUT_JOIN(R.string.video_op_cut_join, R.string.video_op_cut_join_subtitle),
+    MERGE(R.string.video_op_merge, R.string.video_op_merge_subtitle),
+    REMOVE_AUDIO(R.string.video_op_remove_audio, R.string.video_op_remove_audio_subtitle),
+    ASPECT_RATIO(R.string.video_op_aspect, R.string.video_op_aspect_subtitle),
+    FILTER(R.string.video_op_filter, R.string.video_op_filter_subtitle),
+    OVERLAY(R.string.video_op_overlay, R.string.video_op_overlay_subtitle),
+    SLIDESHOW(R.string.video_op_slideshow, R.string.video_op_slideshow_subtitle),
 }
 
 /** Whether the video overlay is an image/logo or a line of text. */
@@ -32,12 +35,12 @@ data class SlideItem(
 )
 
 /** Selectable output aspect ratios (width / height); [ratio] null keeps the source. */
-enum class AspectRatioOption(val label: String, val ratio: Float?) {
-    ORIGINAL("Original", null),
-    WIDE("16:9", 16f / 9f),
-    SQUARE("1:1", 1f),
-    VERTICAL("9:16", 9f / 16f),
-    CLASSIC("4:3", 4f / 3f),
+enum class AspectRatioOption(@StringRes val labelRes: Int, val ratio: Float?) {
+    ORIGINAL(R.string.aspect_original, null),
+    WIDE(R.string.aspect_16_9, 16f / 9f),
+    SQUARE(R.string.aspect_1_1, 1f),
+    VERTICAL(R.string.aspect_9_16, 9f / 16f),
+    CLASSIC(R.string.aspect_4_3, 4f / 3f),
 }
 
 /**

@@ -1,5 +1,8 @@
 package com.momi.watermarker.domain.model
 
+import androidx.annotation.StringRes
+import com.momi.watermarker.R
+
 /**
  * Where an overlay (image or text) is anchored within the video frame.
  *
@@ -9,19 +12,19 @@ package com.momi.watermarker.domain.model
  * the background anchor, so a corner position sits flush inside that corner.
  */
 enum class OverlayPosition(
-    val label: String,
+    @StringRes val labelRes: Int,
     val anchorX: Float,
     val anchorY: Float,
 ) {
-    TOP_LEFT("Top left", -1f, 1f),
-    TOP_CENTER("Top", 0f, 1f),
-    TOP_RIGHT("Top right", 1f, 1f),
-    CENTER_LEFT("Left", -1f, 0f),
-    CENTER("Center", 0f, 0f),
-    CENTER_RIGHT("Right", 1f, 0f),
-    BOTTOM_LEFT("Bottom left", -1f, -1f),
-    BOTTOM_CENTER("Bottom", 0f, -1f),
-    BOTTOM_RIGHT("Bottom right", 1f, -1f);
+    TOP_LEFT(R.string.overlay_pos_top_left, -1f, 1f),
+    TOP_CENTER(R.string.overlay_pos_top, 0f, 1f),
+    TOP_RIGHT(R.string.overlay_pos_top_right, 1f, 1f),
+    CENTER_LEFT(R.string.overlay_pos_left, -1f, 0f),
+    CENTER(R.string.overlay_pos_center, 0f, 0f),
+    CENTER_RIGHT(R.string.overlay_pos_right, 1f, 0f),
+    BOTTOM_LEFT(R.string.overlay_pos_bottom_left, -1f, -1f),
+    BOTTOM_CENTER(R.string.overlay_pos_bottom, 0f, -1f),
+    BOTTOM_RIGHT(R.string.overlay_pos_bottom_right, 1f, -1f);
 
     companion object {
         val DEFAULT = CENTER

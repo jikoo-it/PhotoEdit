@@ -6,10 +6,12 @@ import com.momi.watermarker.data.repository.ImageCutoutRepositoryImpl
 import com.momi.watermarker.data.repository.ImageProcessingRepositoryImpl
 import com.momi.watermarker.data.repository.MediaRepositoryImpl
 import com.momi.watermarker.data.repository.PortraitEffectRepositoryImpl
+import com.momi.watermarker.data.repository.ThemeRepositoryImpl
 import com.momi.watermarker.domain.repository.ImageCutoutRepository
 import com.momi.watermarker.domain.repository.ImageProcessingRepository
 import com.momi.watermarker.domain.repository.MediaRepository
 import com.momi.watermarker.domain.repository.PortraitEffectRepository
+import com.momi.watermarker.domain.repository.ThemeRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -52,4 +54,8 @@ abstract class RepositoryModule {
     abstract fun bindPortraitEffectProcessor(
         impl: DefaultPortraitEffectProcessor,
     ): PortraitEffectProcessor
+
+    @Binds
+    @Singleton
+    abstract fun bindThemeRepository(impl: ThemeRepositoryImpl): ThemeRepository
 }
