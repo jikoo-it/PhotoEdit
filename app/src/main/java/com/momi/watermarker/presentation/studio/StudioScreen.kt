@@ -35,7 +35,6 @@ import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -119,18 +118,12 @@ fun StudioScreen(
     var cutoutFullscreen by remember { mutableStateOf(false) }
     val liveOutline = remember { mutableStateListOf<NormalizedPoint>() }
 
-    LaunchedEffect(uiState.isTracing) {
-        if (uiState.isTracing) cutoutFullscreen = true
-        else liveOutline.clear()
-    }
     LaunchedEffect(uiState.inCutoutSession) {
-        if (!uiState.inCutoutSession) cutoutFullscreen = false
+        cutoutFullscreen = uiState.inCutoutSession
+        if (!uiState.isTracing) liveOutline.clear()
     }
 
-    BackHandler(enabled = cutoutFullscreen) { cutoutFullscreen = false }
-    BackHandler(enabled = uiState.inCutoutSession && !cutoutFullscreen) {
-        viewModel.onCancelCutout()
-    }
+    BackHandler(enabled = uiState.inCutoutSession) { viewModel.onCancelCutout() }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -206,7 +199,6 @@ fun StudioScreen(
                 viewModel = viewModel,
                 liveOutline = liveOutline,
                 interactive = !cutoutFullscreen,
-                onRequestFullscreen = { cutoutFullscreen = true },
             )
 
             OutlinedButton(
@@ -261,7 +253,6 @@ fun StudioScreen(
             uiState = uiState,
             viewModel = viewModel,
             liveOutline = liveOutline,
-            onDismiss = { cutoutFullscreen = false },
         )
     }
 }
@@ -272,7 +263,6 @@ private fun PreviewBox(
     viewModel: StudioViewModel,
     liveOutline: MutableList<NormalizedPoint>,
     interactive: Boolean,
-    onRequestFullscreen: () -> Unit,
 ) {
     Box(
         modifier = Modifier
@@ -290,18 +280,6 @@ private fun PreviewBox(
             interactive = interactive,
             modifier = Modifier.fillMaxSize(),
         )
-        if (uiState.inCutoutSession) {
-            IconButton(
-                onClick = onRequestFullscreen,
-                modifier = Modifier.align(Alignment.TopEnd),
-            ) {
-                Icon(
-                    Icons.Filled.Fullscreen,
-                    contentDescription = stringResource(R.string.cd_studio_trace_fullscreen),
-                    tint = MaterialTheme.extraColors.overlayContent,
-                )
-            }
-        }
     }
 }
 
@@ -310,11 +288,10 @@ private fun CutoutFullscreenDialog(
     uiState: StudioUiState,
     viewModel: StudioViewModel,
     liveOutline: MutableList<NormalizedPoint>,
-    onDismiss: () -> Unit,
 ) {
     val extras = MaterialTheme.extraColors
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = viewModel::onCancelCutout,
         properties = DialogProperties(
             dismissOnBackPress = true,
             dismissOnClickOutside = false,
@@ -336,17 +313,20 @@ private fun CutoutFullscreenDialog(
             ) {
                 Text(
                     text = stringResource(
-                        if (uiState.isTracing) R.string.studio_cut_out_trace
-                        else R.string.studio_cut_out,
+                        when {
+                            uiState.isTracing -> R.string.studio_cut_out_trace
+                            uiState.isReviewingCutout -> R.string.studio_cut_out
+                            else -> R.string.studio_cut_out_auto
+                        },
                     ),
                     style = MaterialTheme.typography.titleMedium,
                     color = extras.immersiveOnBackground,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = onDismiss) {
+                IconButton(onClick = viewModel::onCancelCutout) {
                     Icon(
                         Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.cd_studio_exit_fullscreen),
+                        contentDescription = stringResource(R.string.action_cancel),
                         tint = extras.immersiveOnBackground,
                     )
                 }
@@ -369,8 +349,11 @@ private fun CutoutFullscreenDialog(
             }
             Text(
                 stringResource(
-                    if (uiState.isTracing) R.string.studio_trace_hint
-                    else R.string.studio_cutout_review_hint,
+                    when {
+                        uiState.isTracing -> R.string.studio_trace_hint
+                        uiState.isReviewingCutout -> R.string.studio_cutout_review_hint
+                        else -> R.string.studio_cutout_finding_hint
+                    },
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = extras.immersiveOnBackground.copy(alpha = 0.8f),

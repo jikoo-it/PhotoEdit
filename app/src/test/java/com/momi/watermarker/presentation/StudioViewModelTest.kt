@@ -92,6 +92,8 @@ class StudioViewModelTest {
         advanceUntilIdle()
         val state = vm.uiState.value
         assertTrue(state.isReviewingCutout)
+        assertTrue(state.inCutoutSession)
+        assertTrue(state.cutoutActive)
         assertFalse(state.hasSubject)
         assertFalse(state.canSave)
         assertEquals(squarePath().size, state.cutoutOutline.size)
@@ -109,11 +111,30 @@ class StudioViewModelTest {
         val doc = vm.uiState.value.document!!
         assertTrue(doc.hasSubject())
         assertFalse(vm.uiState.value.isReviewingCutout)
+        assertFalse(vm.uiState.value.inCutoutSession)
         assertEquals(LayerIds.SUBJECT, doc.selectedLayerId)
         assertTrue(vm.uiState.value.canUndo)
         vm.onUndo()
         advanceUntilIdle()
         assertFalse(vm.uiState.value.hasSubject)
+    }
+
+    @Test
+    fun `confirming a second cut out adds another subject`() = runTest {
+        val vm = viewModel()
+        vm.onImageSelected("content://photo")
+        advanceUntilIdle()
+        vm.onCutOut()
+        advanceUntilIdle()
+        vm.onConfirmCutout()
+        advanceUntilIdle()
+        vm.onCutOut()
+        advanceUntilIdle()
+        vm.onConfirmCutout()
+        advanceUntilIdle()
+        val doc = vm.uiState.value.document!!
+        assertEquals(2, doc.subjectLayers().size)
+        assertEquals("${LayerIds.SUBJECT}_2", doc.selectedLayerId)
     }
 
     @Test
@@ -201,6 +222,7 @@ class StudioViewModelTest {
         advanceUntilIdle()
         vm.onStartTrace()
         assertTrue(vm.uiState.value.isTracing)
+        assertTrue(vm.uiState.value.inCutoutSession)
         vm.onTraceCompleted(squarePath())
         val state = vm.uiState.value
         assertFalse(state.isTracing)

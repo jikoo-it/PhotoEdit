@@ -407,8 +407,9 @@
     <string name="studio_cut_out">Cut out</string>
     <string name="studio_cut_out_auto">Auto cut-out</string>
     <string name="studio_cut_out_trace">Trace outline</string>
-    <string name="studio_trace_hint">Full screen, pinch to zoom, then drag one finger around the area you want to keep. Two fingers pan.</string>
+    <string name="studio_trace_hint">Pinch to zoom, two fingers pan, one finger traces the area to keep.</string>
     <string name="studio_cutout_review_hint">Pinch to zoom, then drag handles or the shape. Confirm when it looks right.</string>
+    <string name="studio_cutout_finding_hint">Finding a subject… pinch to zoom while you wait, then drag the outline.</string>
     <string name="studio_trace_fullscreen">Full screen</string>
     <string name="cd_studio_trace_fullscreen">Trace in full screen</string>
     <string name="cd_studio_exit_fullscreen">Exit full screen</string>

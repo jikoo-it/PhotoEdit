@@ -41,6 +41,8 @@ object LayerIds {
 
     /** Bottom → top. Unknown ids are painted above these. */
     val Z_ORDER = listOf(BACKGROUND, FILL, REPLACEMENT, ADJUSTMENT, SUBJECT)
+
+    fun isSubject(id: String): Boolean = id == SUBJECT || id.startsWith("${SUBJECT}_")
 }
 
 /** Flattened composite ready to preview or save. */

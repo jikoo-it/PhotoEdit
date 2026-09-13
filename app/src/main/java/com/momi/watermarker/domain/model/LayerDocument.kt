@@ -15,7 +15,9 @@ data class LayerDocument(
 
     fun layer(id: String): Layer? = layers.find { it.id == id }
 
-    fun hasSubject(): Boolean = layer(LayerIds.SUBJECT) != null
+    fun hasSubject(): Boolean = subjectLayers().isNotEmpty()
+
+    fun subjectLayers(): List<Layer> = layers.filter { LayerIds.isSubject(it.id) }
 
     fun portraitLookEnabled(): Boolean {
         val adj = layer(LayerIds.ADJUSTMENT)
@@ -38,7 +40,7 @@ data class LayerDocument(
         return visible.none { layer ->
             when (layer.content) {
                 is LayerContent.Fill -> true
-                is LayerContent.Raster -> layer.id != LayerIds.SUBJECT
+                is LayerContent.Raster -> !LayerIds.isSubject(layer.id)
                 is LayerContent.Adjustment -> false
             }
         }
@@ -57,8 +59,17 @@ data class LayerDocument(
         return copy(layers = next, selectedLayerId = selected)
     }
 
-    fun withSubject(uri: String): LayerDocument =
-        upsert(Layer(LayerIds.SUBJECT, "Subject", LayerContent.Raster(uri)))
+    fun withSubject(uri: String): LayerDocument {
+        val existing = subjectLayers()
+        var index = existing.size + 1
+        var id = subjectId(index)
+        while (layer(id) != null) {
+            index++
+            id = subjectId(index)
+        }
+        val name = if (index == 1) "Subject" else "Subject $index"
+        return upsert(Layer(id, name, LayerContent.Raster(uri)))
+    }
 
     fun withPortraitLook(enabled: Boolean, blurStrength: Float = blurStrength()): LayerDocument {
         val blur = blurStrength.coerceIn(0f, 1f)
@@ -173,9 +184,13 @@ data class LayerDocument(
         )
 
         private fun zIndex(id: String): Int {
+            if (LayerIds.isSubject(id)) return LayerIds.Z_ORDER.indexOf(LayerIds.SUBJECT)
             val index = LayerIds.Z_ORDER.indexOf(id)
             return if (index >= 0) index else LayerIds.Z_ORDER.size
         }
+
+        private fun subjectId(index: Int): String =
+            if (index <= 1) LayerIds.SUBJECT else "${LayerIds.SUBJECT}_$index"
     }
 }
 

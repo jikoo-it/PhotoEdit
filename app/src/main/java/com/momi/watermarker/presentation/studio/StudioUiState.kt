@@ -22,6 +22,8 @@ data class StudioUiState(
     val pendingBlur: Float? = null,
     val isTracing: Boolean = false,
     val cutoutOutline: List<NormalizedPoint> = emptyList(),
+    /** True from Auto cut-out / Trace until confirm or cancel, including the find-subject wait. */
+    val cutoutActive: Boolean = false,
 ) {
     val hasSource: Boolean get() = document != null
     val sourceUri: String? get() = document?.sourceUri
@@ -31,7 +33,7 @@ data class StudioUiState(
             return doc.canvasWidth / doc.canvasHeight.toFloat().coerceAtLeast(1f)
         }
     val isReviewingCutout: Boolean get() = cutoutOutline.isNotEmpty()
-    val inCutoutSession: Boolean get() = isTracing || isReviewingCutout
+    val inCutoutSession: Boolean get() = cutoutActive || isTracing || isReviewingCutout
     val layers: List<Layer> get() = document?.layers.orEmpty().asReversed()
     val selectedLayerId: String? get() = document?.selectedLayerId
     val hasSubject: Boolean get() = document?.hasSubject() == true

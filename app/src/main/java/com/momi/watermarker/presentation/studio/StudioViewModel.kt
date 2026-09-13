@@ -93,16 +93,17 @@ class StudioViewModel @Inject constructor(
         if (_uiState.value.isTracing || _uiState.value.isBusy) return
         extractJob?.cancel()
         extractJob = viewModelScope.launch {
-            _uiState.update { it.copy(isSegmenting = true, isTracing = false) }
+            _uiState.update { it.copy(isSegmenting = true, isTracing = false, cutoutActive = true) }
             when (val result = proposeSubjectOutline(source)) {
                 is Outcome.Success -> _uiState.update {
                     it.copy(
                         isSegmenting = false,
                         cutoutOutline = result.data,
+                        cutoutActive = true,
                     )
                 }
                 is Outcome.Failure -> {
-                    _uiState.update { it.copy(isSegmenting = false) }
+                    _uiState.update { it.copy(isSegmenting = false, cutoutActive = false) }
                     emitMessage(R.string.error_cutout_subject, result.error.message.orEmpty())
                 }
             }
@@ -111,11 +112,19 @@ class StudioViewModel @Inject constructor(
 
     fun onStartTrace() {
         if (document() == null || _uiState.value.isBusy) return
-        _uiState.update { it.copy(isTracing = true, cutoutOutline = emptyList()) }
+        _uiState.update { it.copy(isTracing = true, cutoutOutline = emptyList(), cutoutActive = true) }
     }
 
     fun onCancelCutout() {
-        _uiState.update { it.copy(isTracing = false, cutoutOutline = emptyList()) }
+        extractJob?.cancel()
+        _uiState.update {
+            it.copy(
+                isTracing = false,
+                cutoutOutline = emptyList(),
+                isSegmenting = false,
+                cutoutActive = false,
+            )
+        }
     }
 
     fun onTraceCompleted(outline: List<NormalizedPoint>) {
@@ -154,7 +163,9 @@ class StudioViewModel @Inject constructor(
             _uiState.update { it.copy(isSegmenting = true) }
             when (val result = cutoutPath(source, outline)) {
                 is Outcome.Success -> {
-                    _uiState.update { it.copy(isSegmenting = false, cutoutOutline = emptyList()) }
+                    _uiState.update {
+                        it.copy(isSegmenting = false, cutoutOutline = emptyList(), cutoutActive = false)
+                    }
                     mutate { it.withSubject(result.data) }
                 }
                 is Outcome.Failure -> {

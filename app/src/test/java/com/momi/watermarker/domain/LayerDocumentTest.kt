@@ -36,6 +36,31 @@ class LayerDocumentTest {
     }
 
     @Test
+    fun `a second cut-out adds another subject instead of replacing`() {
+        val doc = photo()
+            .withSubject("content://one")
+            .withSubject("content://two")
+        assertEquals(
+            listOf(LayerIds.BACKGROUND, LayerIds.SUBJECT, "${LayerIds.SUBJECT}_2"),
+            doc.layers.map { it.id },
+        )
+        assertEquals(2, doc.subjectLayers().size)
+        assertEquals("${LayerIds.SUBJECT}_2", doc.selectedLayerId)
+        assertTrue(doc.hasSubject())
+    }
+
+    @Test
+    fun `removing one subject keeps the others`() {
+        val doc = photo()
+            .withSubject("content://one")
+            .withSubject("content://two")
+            .removing(LayerIds.SUBJECT)
+        assertEquals(1, doc.subjectLayers().size)
+        assertEquals("content://two", (doc.subjectLayers().single().content as LayerContent.Raster).uri)
+        assertTrue(doc.hasSubject())
+    }
+
+    @Test
     fun `transparent backdrop hides opaque layers but keeps the subject`() {
         val doc = photo().withSubject("content://cutout").showingTransparentBackdrop()
         assertEquals(StudioBackdrop.TRANSPARENT, doc.backdrop())

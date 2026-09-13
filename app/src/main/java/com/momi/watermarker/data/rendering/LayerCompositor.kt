@@ -64,7 +64,7 @@ class LayerCompositor @Inject constructor(
 
             is LayerContent.Raster -> {
                 val src = rasterFor(content.uri)
-                val isBackdrop = layer.id != LayerIds.SUBJECT
+                val isBackdrop = !LayerIds.isSubject(layer.id)
                 if (!isBackdrop) src.setHasAlpha(true)
                 val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply {
                     alpha = (opacity * 255f).roundToInt().coerceIn(0, 255)

@@ -1,6 +1,9 @@
 package com.momi.watermarker.data.repository
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
 import android.net.Uri
 import com.momi.watermarker.data.rendering.LayerCompositor
 import com.momi.watermarker.data.rendering.PortraitEffectProcessor
@@ -107,24 +110,34 @@ class StudioRepositoryImpl @Inject constructor(
             PortraitEffect.SelectiveColor
         }
         val source = imageStorage.decodeBoundedBitmap(Uri.parse(document.sourceUri), maxLongEdge)
-        var foreground: Bitmap? = null
+        val decoded = mutableListOf<Bitmap>()
         try {
-            val subjectUri = document.layer(LayerIds.SUBJECT)
-                ?.takeIf { it.visible }
-                ?.let { it.content as? LayerContent.Raster }
-                ?.uri
-            // Auto people PNGs can decode as opaque black around the person.
-            // Re-run the in-memory portrait pipeline on the original photo.
-            val customCutout = subjectUri != null && "studio_people" !in subjectUri
+            val subjectUris = document.subjectLayers()
+                .filter { it.visible }
+                .mapNotNull { (it.content as? LayerContent.Raster)?.uri }
+            val customCutout = subjectUris.any { "studio_people" !in it }
             if (!customCutout) {
                 return processor.apply(source, effect)
             }
-            foreground = imageStorage.decodeBoundedBitmap(Uri.parse(subjectUri), maxLongEdge)
-            foreground.setHasAlpha(true)
-            return processor.composite(source, foreground, effect)
+            for (uri in subjectUris) {
+                val bitmap = imageStorage.decodeBoundedBitmap(Uri.parse(uri), maxLongEdge)
+                bitmap.setHasAlpha(true)
+                decoded += bitmap
+            }
+            val first = decoded.first()
+            val result = processor.composite(source, first, effect)
+            if (decoded.size > 1) {
+                val stamp = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+                val dest = RectF(0f, 0f, result.width.toFloat(), result.height.toFloat())
+                val canvas = Canvas(result)
+                for (i in 1 until decoded.size) {
+                    canvas.drawBitmap(decoded[i], null, dest, stamp)
+                }
+            }
+            return result
         } finally {
             source.recycle()
-            foreground?.recycle()
+            decoded.forEach { it.recycle() }
         }
     }
 
