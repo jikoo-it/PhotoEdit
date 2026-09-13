@@ -115,14 +115,18 @@ data class LayerDocument(
         },
     )
 
-    fun showingTransparentBackdrop(): LayerDocument = copy(
-        layers = layers.map { layer ->
-            when (layer.id) {
-                LayerIds.BACKGROUND, LayerIds.FILL, LayerIds.REPLACEMENT -> layer.copy(visible = false)
-                else -> layer
-            }
-        },
-    )
+    fun showingTransparentBackdrop(): LayerDocument {
+        // Portrait look needs the original photo as the grayscale backdrop.
+        if (portraitLookEnabled()) return showingOriginalBackdrop()
+        return copy(
+            layers = layers.map { layer ->
+                when (layer.id) {
+                    LayerIds.BACKGROUND, LayerIds.FILL, LayerIds.REPLACEMENT -> layer.copy(visible = false)
+                    else -> layer
+                }
+            },
+        )
+    }
 
     fun showingColorFill(argb: Int = fillColorArgb()): LayerDocument {
         val withFill = upsert(Layer(LayerIds.FILL, "Fill", LayerContent.Fill(argb), visible = true))

@@ -45,6 +45,7 @@ class PathCutout @Inject constructor() {
             0f,
             Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN) },
         )
+        out.setHasAlpha(true)
         mask.recycle()
         return out
     }

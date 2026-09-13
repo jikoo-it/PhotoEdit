@@ -19,4 +19,11 @@ interface PortraitEffectProcessor {
      * The caller owns [bitmap] and the returned bitmap.
      */
     suspend fun extractForeground(bitmap: Bitmap): Bitmap
+
+    /**
+     * Grayscale (± blur) [source], then stamp [foreground] on top. [source] is
+     * the full photo and stays opaque as the backdrop; [foreground] should be
+     * the color subject with a transparent background.
+     */
+    fun composite(source: Bitmap, foreground: Bitmap, effect: PortraitEffect): Bitmap
 }

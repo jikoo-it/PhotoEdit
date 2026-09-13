@@ -75,6 +75,7 @@ class ImageStorage @Inject constructor(
         // 2) Full decode with power-of-two subsampling to bound the allocation.
         val options = BitmapFactory.Options().apply {
             inSampleSize = sampleSizeFor(max(bounds.outWidth, bounds.outHeight), maxLongEdge)
+            inPreferredConfig = Bitmap.Config.ARGB_8888
         }
         val decoded = context.contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "Cannot open input stream for $uri" }
@@ -153,6 +154,7 @@ class ImageStorage @Inject constructor(
         val extension = if (format == Bitmap.CompressFormat.PNG) "png" else "jpg"
         val quality = if (format == Bitmap.CompressFormat.PNG) 100 else JPEG_QUALITY
         val file = File(dir, "${prefix}_${System.currentTimeMillis()}.$extension")
+        if (format == Bitmap.CompressFormat.PNG) bitmap.setHasAlpha(true)
         FileOutputStream(file).use { out ->
             bitmap.compress(format, quality, out)
         }

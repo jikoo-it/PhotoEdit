@@ -112,6 +112,18 @@ class LayerDocumentTest {
     }
 
     @Test
+    fun `transparent backdrop is kept original while portrait look is on`() {
+        val doc = photo()
+            .withSubject("content://people")
+            .withPortraitLook(true)
+            .showingTransparentBackdrop()
+        assertTrue(doc.portraitLookEnabled())
+        assertEquals(StudioBackdrop.ORIGINAL, doc.backdrop())
+        assertTrue(doc.layer(LayerIds.BACKGROUND)!!.visible)
+        assertFalse(doc.producesTransparency())
+    }
+
+    @Test
     fun `background cannot be removed`() {
         val doc = photo().removing(LayerIds.BACKGROUND)
         assertNotNull(doc.layer(LayerIds.BACKGROUND))

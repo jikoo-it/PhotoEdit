@@ -528,7 +528,13 @@ private fun BackdropSection(
         modifier = Modifier.horizontalScroll(rememberScrollState()),
     ) {
         BackdropChip(StudioBackdrop.ORIGINAL, R.string.studio_backdrop_original, uiState, viewModel)
-        BackdropChip(StudioBackdrop.TRANSPARENT, R.string.background_mode_transparent, uiState, viewModel)
+        BackdropChip(
+            StudioBackdrop.TRANSPARENT,
+            R.string.background_mode_transparent,
+            uiState,
+            viewModel,
+            enabled = !uiState.portraitLook,
+        )
         BackdropChip(StudioBackdrop.COLOR, R.string.background_mode_color, uiState, viewModel)
         FilterChip(
             selected = uiState.backdrop == StudioBackdrop.IMAGE,
@@ -565,10 +571,12 @@ private fun BackdropChip(
     labelRes: Int,
     uiState: StudioUiState,
     viewModel: StudioViewModel,
+    enabled: Boolean = true,
 ) {
     FilterChip(
         selected = uiState.backdrop == backdrop,
         onClick = { viewModel.onBackdropSelected(backdrop) },
+        enabled = enabled,
         label = { Text(stringResource(labelRes)) },
     )
 }

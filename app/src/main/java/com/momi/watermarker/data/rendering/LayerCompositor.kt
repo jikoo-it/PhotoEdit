@@ -2,17 +2,20 @@ package com.momi.watermarker.data.rendering
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import com.momi.watermarker.domain.model.Layer
 import com.momi.watermarker.domain.model.LayerContent
 import com.momi.watermarker.domain.model.LayerDocument
+import com.momi.watermarker.domain.model.LayerIds
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -61,10 +64,15 @@ class LayerCompositor @Inject constructor(
 
             is LayerContent.Raster -> {
                 val src = rasterFor(content.uri)
+                val isBackdrop = layer.id != LayerIds.SUBJECT
+                if (!isBackdrop) src.setHasAlpha(true)
                 val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply {
                     alpha = (opacity * 255f).roundToInt().coerceIn(0, 255)
+                    // SRC fills the canvas (including alpha) so portrait look / blur
+                    // always have an opaque photo behind the subject cut-out.
+                    if (isBackdrop) xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC)
                 }
-                Canvas(dest).drawBitmap(src, null, containRect(src, dest.width, dest.height), paint)
+                Canvas(dest).drawBitmap(src, null, destRect(dest), paint)
                 dest
             }
 
@@ -101,18 +109,17 @@ class LayerCompositor @Inject constructor(
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
         }
-        Canvas(out).drawBitmap(src, 0f, 0f, paint)
+        Canvas(out).apply {
+            // If the backdrop didn't cover a pixel, keep a solid gray instead of
+            // punching a hole that makes the background "disappear" under the subject.
+            drawColor(Color.WHITE)
+            drawBitmap(src, 0f, 0f, paint)
+        }
         return out
     }
 
-    private fun containRect(src: Bitmap, targetW: Int, targetH: Int): RectF {
-        val scale = min(targetW / src.width.toFloat(), targetH / src.height.toFloat())
-        val drawW = src.width * scale
-        val drawH = src.height * scale
-        val left = (targetW - drawW) / 2f
-        val top = (targetH - drawH) / 2f
-        return RectF(left, top, left + drawW, top + drawH)
-    }
+    private fun destRect(dest: Bitmap): RectF =
+        RectF(0f, 0f, dest.width.toFloat(), dest.height.toFloat())
 
     private fun blurRadiusPx(strength: Float, longEdge: Int): Int =
         (strength.coerceIn(0f, 1f) * MAX_BLUR_FRACTION * longEdge).roundToInt()

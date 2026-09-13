@@ -7,7 +7,10 @@ import com.momi.watermarker.data.rendering.PortraitEffectProcessor
 import com.momi.watermarker.data.storage.ImageStorage
 import com.momi.watermarker.di.IoDispatcher
 import com.momi.watermarker.domain.model.FlattenedImage
+import com.momi.watermarker.domain.model.LayerContent
 import com.momi.watermarker.domain.model.LayerDocument
+import com.momi.watermarker.domain.model.LayerIds
+import com.momi.watermarker.domain.model.PortraitEffect
 import com.momi.watermarker.domain.repository.StudioRepository
 import com.momi.watermarker.domain.util.Outcome
 import kotlinx.coroutines.CancellationException
@@ -55,15 +58,18 @@ class StudioRepositoryImpl @Inject constructor(
             var result: Bitmap? = null
             try {
                 val (outW, outH) = workingSize(document, maxLongEdge)
-                val decoded = mutableMapOf<String, Bitmap>()
-                result = compositor.flatten(document, outW, outH) { uri ->
-                    decoded.getOrPut(uri) {
-                        val bitmap = imageStorage.decodeBoundedBitmap(
-                            Uri.parse(uri),
-                            max(outW, outH),
-                        )
-                        rasters += bitmap
-                        bitmap
+                result = flattenPortraitLook(document, max(outW, outH))
+                if (result == null) {
+                    val decoded = mutableMapOf<String, Bitmap>()
+                    result = compositor.flatten(document, outW, outH) { uri ->
+                        decoded.getOrPut(uri) {
+                            val bitmap = imageStorage.decodeBoundedBitmap(
+                                Uri.parse(uri),
+                                max(outW, outH),
+                            )
+                            rasters += bitmap
+                            bitmap
+                        }
                     }
                 }
                 val hasAlpha = document.producesTransparency()
@@ -80,6 +86,47 @@ class StudioRepositoryImpl @Inject constructor(
                 result?.recycle()
             }
         }
+
+    /**
+     * Portrait look must grayscale the **full photo**, then stamp the color
+     * subject on top. The generic layer loop can miss that backdrop, which
+     * shows up as "only the person, background gone."
+     */
+    private suspend fun flattenPortraitLook(document: LayerDocument, maxLongEdge: Int): Bitmap? {
+        val adjLayer = document.layer(LayerIds.ADJUSTMENT) ?: return null
+        if (!adjLayer.visible) return null
+        val adj = adjLayer.content as? LayerContent.Adjustment ?: return null
+        if (!adj.grayscale) return null
+        if (document.layer(LayerIds.BACKGROUND)?.visible != true) return null
+        if (document.layer(LayerIds.FILL)?.visible == true) return null
+        if (document.layer(LayerIds.REPLACEMENT)?.visible == true) return null
+
+        val effect = if (adj.blurStrength > 0.01f) {
+            PortraitEffect.SelectiveColorWithBlur(adj.blurStrength)
+        } else {
+            PortraitEffect.SelectiveColor
+        }
+        val source = imageStorage.decodeBoundedBitmap(Uri.parse(document.sourceUri), maxLongEdge)
+        var foreground: Bitmap? = null
+        try {
+            val subjectUri = document.layer(LayerIds.SUBJECT)
+                ?.takeIf { it.visible }
+                ?.let { it.content as? LayerContent.Raster }
+                ?.uri
+            // Auto people PNGs can decode as opaque black around the person.
+            // Re-run the in-memory portrait pipeline on the original photo.
+            val customCutout = subjectUri != null && "studio_people" !in subjectUri
+            if (!customCutout) {
+                return processor.apply(source, effect)
+            }
+            foreground = imageStorage.decodeBoundedBitmap(Uri.parse(subjectUri), maxLongEdge)
+            foreground.setHasAlpha(true)
+            return processor.composite(source, foreground, effect)
+        } finally {
+            source.recycle()
+            foreground?.recycle()
+        }
+    }
 
     private fun workingSize(document: LayerDocument, maxLongEdge: Int): Pair<Int, Int> {
         val canvasW = document.canvasWidth.coerceAtLeast(1)

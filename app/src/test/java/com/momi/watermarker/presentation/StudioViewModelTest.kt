@@ -157,10 +157,25 @@ class StudioViewModelTest {
         val doc = vm.uiState.value.document!!
         assertTrue(doc.hasSubject())
         assertTrue(doc.portraitLookEnabled())
+        assertEquals(StudioBackdrop.ORIGINAL, vm.uiState.value.backdrop)
         assertEquals(
             "content://people",
             (doc.layer(LayerIds.SUBJECT)!!.content as LayerContent.Raster).uri,
         )
+    }
+
+    @Test
+    fun `transparent backdrop is ignored while portrait look is on`() = runTest {
+        val vm = viewModel()
+        vm.onImageSelected("content://photo")
+        advanceUntilIdle()
+        vm.onPortraitLookToggled(true)
+        advanceUntilIdle()
+        vm.onBackdropSelected(StudioBackdrop.TRANSPARENT)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.portraitLook)
+        assertEquals(StudioBackdrop.ORIGINAL, vm.uiState.value.backdrop)
+        assertEquals(ExportFormat.JPEG, vm.uiState.value.exportFormat)
     }
 
     @Test

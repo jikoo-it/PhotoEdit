@@ -2,11 +2,10 @@ package com.momi.watermarker.data.rendering
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
+import android.graphics.RectF
 import com.momi.watermarker.data.mlkit.PersonSegmenter
 import com.momi.watermarker.domain.model.PortraitEffect
 import javax.inject.Inject
@@ -35,67 +34,67 @@ class DefaultPortraitEffectProcessor @Inject constructor(
 ) : PortraitEffectProcessor {
 
     override suspend fun apply(bitmap: Bitmap, effect: PortraitEffect): Bitmap {
-        val w = bitmap.width
-        val h = bitmap.height
-        val longEdge = max(w, h)
-
-        val mask = segmenter.personMask(bitmap)
-        var background: Bitmap? = null
-        var foreground: Bitmap? = null
+        val foreground = extractForeground(bitmap)
         try {
-            feather(mask, featherRadius(longEdge))
+            return composite(bitmap, foreground, effect)
+        } finally {
+            foreground.recycle()
+        }
+    }
 
-            // --- Background: grayscale, optionally blurred --------------------
-            val gray = grayscale(bitmap)
-            background = when (effect) {
-                is PortraitEffect.SelectiveColor -> gray
-                is PortraitEffect.SelectiveColorWithBlur -> {
-                    val radius = blurRadiusPx(effect.blurRadius, longEdge)
-                    val blurred = bitmapBlur.blur(gray, radius)
-                    if (blurred !== gray) gray.recycle()
-                    blurred
-                }
+    override fun composite(source: Bitmap, foreground: Bitmap, effect: PortraitEffect): Bitmap {
+        val w = source.width
+        val h = source.height
+        val longEdge = max(w, h)
+        val gray = grayscale(source)
+        val background = when (effect) {
+            is PortraitEffect.SelectiveColor -> gray
+            is PortraitEffect.SelectiveColorWithBlur -> {
+                val radius = blurRadiusPx(effect.blurRadius, longEdge)
+                val blurred = bitmapBlur.blur(gray, radius)
+                if (blurred !== gray) gray.recycle()
+                blurred
             }
-
-            // --- Foreground: color subject cut out by the feathered mask ------
-            foreground = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-            Canvas(foreground).drawBitmap(
-                mask,
-                0f,
-                0f,
-                Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-                },
-            )
-
-            // --- Composite ----------------------------------------------------
+        }
+        try {
             val result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val stamp = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+            foreground.setHasAlpha(true)
             Canvas(result).apply {
                 drawBitmap(background, 0f, 0f, null)
-                drawBitmap(foreground, 0f, 0f, null)
+                drawBitmap(foreground, null, RectF(0f, 0f, w.toFloat(), h.toFloat()), stamp)
             }
+            result.setHasAlpha(false)
             return result
         } finally {
-            mask.recycle()
-            background?.recycle()
-            foreground?.recycle()
+            background.recycle()
         }
     }
 
     override suspend fun extractForeground(bitmap: Bitmap): Bitmap {
-        val mask = segmenter.personMask(bitmap)
+        var mask = segmenter.personMask(bitmap)
         var foreground: Bitmap? = null
         try {
+            if (mask.width != bitmap.width || mask.height != bitmap.height) {
+                val scaled = Bitmap.createScaledBitmap(mask, bitmap.width, bitmap.height, true)
+                if (scaled !== mask) {
+                    mask.recycle()
+                    mask = scaled
+                }
+            }
             feather(mask, featherRadius(max(bitmap.width, bitmap.height)))
             foreground = bitmap.copy(Bitmap.Config.ARGB_8888, true)
             Canvas(foreground).drawBitmap(
                 mask,
-                0f,
-                0f,
+                null,
+                RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()),
                 Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
                 },
             )
+            // copy() from a JPEG keeps hasAlpha=false; without this, PNG encode
+            // writes punched holes as opaque black and the photo disappears.
+            foreground.setHasAlpha(true)
             return foreground
         } catch (t: Throwable) {
             foreground?.recycle()
@@ -107,11 +106,24 @@ class DefaultPortraitEffectProcessor @Inject constructor(
 
     /** A fully desaturated (grayscale) opaque copy of [src]. */
     private fun grayscale(src: Bitmap): Bitmap {
-        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
+        val w = src.width
+        val h = src.height
+        val out = src.copy(Bitmap.Config.ARGB_8888, true)
+            ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also { dest ->
+                Canvas(dest).drawBitmap(src, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
+            }
+        val pixels = IntArray(w * h)
+        out.getPixels(pixels, 0, w, 0, 0, w, h)
+        for (i in pixels.indices) {
+            val c = pixels[i]
+            val r = (c ushr 16) and 0xff
+            val g = (c ushr 8) and 0xff
+            val b = c and 0xff
+            val y = (r * 54 + g * 183 + b * 19) shr 8
+            pixels[i] = (0xff shl 24) or (y shl 16) or (y shl 8) or y
         }
-        Canvas(out).drawBitmap(src, 0f, 0f, paint)
+        out.setPixels(pixels, 0, w, 0, 0, w, h)
+        out.setHasAlpha(false)
         return out
     }
 
