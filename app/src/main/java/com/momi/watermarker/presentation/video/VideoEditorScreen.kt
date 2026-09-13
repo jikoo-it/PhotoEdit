@@ -38,6 +38,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -357,8 +358,31 @@ private fun CutJoinControls(
     viewModel: VideoEditorViewModel,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.exclude_sections),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    stringResource(R.string.exclude_sections_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = uiState.excludeSections,
+                onCheckedChange = viewModel::onExcludeSectionsChanged,
+            )
+        }
         Text(
-            stringResource(R.string.segments_to_keep),
+            stringResource(
+                if (uiState.excludeSections) R.string.segments_to_exclude else R.string.segments_to_keep,
+            ),
             style = MaterialTheme.typography.bodyMedium,
         )
         uiState.keepRanges.forEachIndexed { index, range ->
@@ -382,17 +406,26 @@ private fun CutJoinControls(
                     },
                     valueRange = 0f..uiState.durationMs.toFloat(),
                 )
-                Text(
-                    stringResource(R.string.speed_value, range.speed),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                Slider(
-                    value = range.speed,
-                    onValueChange = { viewModel.onKeepRangeSpeedChanged(index, it) },
-                    valueRange = 0.25f..4f,
-                )
+                if (!uiState.excludeSections) {
+                    Text(
+                        stringResource(R.string.speed_value, range.speed),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Slider(
+                        value = range.speed,
+                        onValueChange = { viewModel.onKeepRangeSpeedChanged(index, it) },
+                        valueRange = 0.25f..4f,
+                    )
+                }
                 HorizontalDivider()
             }
+        }
+        if (uiState.excludeSections && uiState.keepRanges.isNotEmpty() && uiState.resolvedKeepRanges.isEmpty()) {
+            Text(
+                stringResource(R.string.exclude_covers_all),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
         }
         TextButton(onClick = viewModel::onAddKeepRange) { Text(stringResource(R.string.add_segment)) }
     }

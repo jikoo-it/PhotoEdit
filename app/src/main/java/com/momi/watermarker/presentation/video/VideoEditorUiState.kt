@@ -10,6 +10,7 @@ import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.TrimRange
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoColorFilter
+import com.momi.watermarker.domain.model.complementWithin
 
 /**
  * The editing operations offered on the video home screen. Each is a distinct,
@@ -47,15 +48,17 @@ enum class AspectRatioOption(@StringRes val labelRes: Int, val ratio: Float?) {
  * Immutable UI state for the whole video editor.
  *
  * [op] null means the home/op-picker is showing; otherwise the state carries
- * whatever the active operation needs (a trim window, a list of kept ranges,
- * multiple sources to merge, an aspect ratio, an overlay image, …).
+ * whatever the active operation needs (a trim window, a list of keep-or-exclude
+ * ranges, multiple sources to merge, an aspect ratio, an overlay image, …).
  */
 data class VideoEditorUiState(
     val op: VideoOp? = null,
     val sources: List<VideoClip> = emptyList(),
     val durationMs: Long = 0L,
-    // Trim / cut & join (one or more kept ranges)
+    // Trim / cut & join (ranges to keep, or to exclude when [excludeSections] is on)
     val keepRanges: List<TrimRange> = emptyList(),
+    /** When true, [keepRanges] are cut out and the leftover parts are joined. */
+    val excludeSections: Boolean = false,
     // Aspect ratio
     val aspectRatio: AspectRatioOption = AspectRatioOption.ORIGINAL,
     /** Per-source reframe for Merge, parallel to [sources]; kept in sync on add/reorder. */
@@ -93,10 +96,21 @@ data class VideoEditorUiState(
     /** The clip to show in the preview player: the result if present, else the first source. */
     val previewUri: String? get() = resultClip?.uri ?: primarySource?.uri
 
+    /**
+     * Ranges actually sent to cut-and-join: the marked windows as-is, or the
+     * leftover after those windows are excluded.
+     */
+    val resolvedKeepRanges: List<TrimRange>
+        get() = if (excludeSections) keepRanges.complementWithin(durationMs) else keepRanges
+
     /** Whether the active operation has everything it needs to export. */
     val canExport: Boolean
         get() = !isExporting && when (op) {
-            VideoOp.CUT_JOIN -> isReady && keepRanges.isNotEmpty() && keepRanges.all { it.isValid }
+            VideoOp.CUT_JOIN ->
+                isReady &&
+                    keepRanges.isNotEmpty() &&
+                    keepRanges.all { it.isValid } &&
+                    resolvedKeepRanges.isNotEmpty()
             VideoOp.MERGE -> sources.size >= 2
             VideoOp.REMOVE_AUDIO -> hasVideo
             VideoOp.ASPECT_RATIO -> hasVideo && aspectRatio.ratio != null

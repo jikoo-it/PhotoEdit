@@ -8,6 +8,7 @@ import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.NormalizedRect
 import com.momi.watermarker.domain.model.OverlayPosition
 import com.momi.watermarker.domain.model.TrimRange
+import com.momi.watermarker.domain.model.complementWithin
 import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoColorFilter
@@ -86,7 +87,7 @@ class VideoEditorViewModel @Inject constructor(
                 is Outcome.Success -> _uiState.update {
                     it.copy(
                         durationMs = result.data,
-                        keepRanges = listOf(TrimRange(0L, result.data)),
+                        keepRanges = listOf(defaultCutRange(it.excludeSections, result.data)),
                     )
                 }
                 is Outcome.Failure ->
@@ -237,11 +238,32 @@ class VideoEditorViewModel @Inject constructor(
 
     // --- Per-op controls ------------------------------------------------------
 
+    /**
+     * When checked, the range sliders mark sections to cut out rather than keep.
+     * A full-span range would drop the whole clip, so that case is replaced with
+     * a centered slice the user can drag.
+     */
+    fun onExcludeSectionsChanged(exclude: Boolean) {
+        _uiState.update { state ->
+            val duration = state.durationMs
+            val nextRanges =
+                if (exclude && duration > 0L && state.keepRanges.complementWithin(duration).isEmpty()) {
+                    listOf(TrimRange.centeredSlice(duration))
+                } else {
+                    state.keepRanges
+                }
+            state.copy(excludeSections = exclude, keepRanges = nextRanges).invalidatingResult()
+        }
+    }
+
     fun onAddKeepRange() {
-        val duration = _uiState.value.durationMs
+        val state = _uiState.value
+        val duration = state.durationMs
         if (duration <= 0L) return
         _uiState.update {
-            it.copy(keepRanges = it.keepRanges + TrimRange(0L, duration)).invalidatingResult()
+            it.copy(
+                keepRanges = it.keepRanges + defaultCutRange(state.excludeSections, duration),
+            ).invalidatingResult()
         }
     }
 
@@ -321,7 +343,7 @@ class VideoEditorViewModel @Inject constructor(
             _uiState.update { it.copy(isExporting = true, resultClip = null, isSaved = false) }
             val edited: Outcome<VideoClip> = when (op) {
                 VideoOp.CUT_JOIN ->
-                    cutAndJoin(source!!, state.keepRanges)
+                    cutAndJoin(source!!, state.resolvedKeepRanges)
                 VideoOp.MERGE ->
                     mergeVideos(state.sources, state.mergeAspects.map { it.ratio })
                 VideoOp.REMOVE_AUDIO ->
@@ -402,4 +424,8 @@ class VideoEditorViewModel @Inject constructor(
             else appContext.getString(resId, *formatArgs),
         )
     }
+
+    /** Full clip when keeping; a centered slice when excluding, so something remains. */
+    private fun defaultCutRange(exclude: Boolean, durationMs: Long): TrimRange =
+        if (exclude) TrimRange.centeredSlice(durationMs) else TrimRange.covering(durationMs)
 }

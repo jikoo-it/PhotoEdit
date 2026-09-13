@@ -297,7 +297,7 @@
     <string name="video_home_title">Video</string>
     <string name="choose_an_operation">Choose an operation</string>
     <string name="video_op_cut_join">Trim / Cut &amp; Join</string>
-    <string name="video_op_cut_join_subtitle">Keep one section, or several stitched together</string>
+    <string name="video_op_cut_join_subtitle">Keep sections, or mark sections to cut out</string>
     <string name="video_op_merge">Merge</string>
     <string name="video_op_merge_subtitle">Join multiple videos into one</string>
     <string name="video_op_remove_audio">Remove Sound</string>
@@ -321,7 +321,11 @@
     <string name="apply_op_and_preview">Apply %1$s &amp; preview</string>
     <string name="result_preview_title">Result — preview before saving</string>
     <string name="crop_overlay">Crop overlay</string>
+    <string name="exclude_sections">Exclude sections</string>
+    <string name="exclude_sections_desc">When on, the ranges below are cut out and the rest is joined.</string>
     <string name="segments_to_keep">Segments to keep (joined in order):</string>
+    <string name="segments_to_exclude">Segments to exclude (cut out):</string>
+    <string name="exclude_covers_all">Those ranges cover the whole video. Shrink them so something remains.</string>
     <string name="segment_range">#%1$d: %2$s – %3$s</string>
     <string name="speed_value">Speed: %1$.2f×</string>
     <string name="add_segment">+ Add segment</string>
