@@ -21,8 +21,14 @@ fun DigitField(
     modifier: Modifier = Modifier,
     suffix: String? = null,
     maxDigits: Int = 6,
+    allowZero: Boolean = false,
+    enabled: Boolean = true,
 ) {
-    val shown = if (value > 0L) value.toString() else ""
+    val shown = when {
+        allowZero -> value.coerceAtLeast(0L).toString()
+        value > 0L -> value.toString()
+        else -> ""
+    }
     var text by remember { mutableStateOf(shown) }
     LaunchedEffect(shown) {
         if (text.toLongOrNull() != value) text = shown
@@ -32,11 +38,14 @@ fun DigitField(
         onValueChange = { incoming ->
             val digits = incoming.filter { it.isDigit() }.take(maxDigits)
             text = digits
-            digits.toLongOrNull()?.takeIf { it > 0L }?.let(onValueChange)
+            digits.toLongOrNull()
+                ?.takeIf { if (allowZero) it >= 0L else it > 0L }
+                ?.let(onValueChange)
         },
         label = { Text(label) },
         suffix = { if (suffix != null) Text(suffix) },
         singleLine = true,
+        enabled = enabled,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         modifier = modifier,
     )

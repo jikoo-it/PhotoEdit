@@ -1,5 +1,7 @@
 package com.momi.watermarker.domain
 
+import com.momi.watermarker.domain.model.CompressionMode
+import com.momi.watermarker.domain.model.ExportFormat
 import com.momi.watermarker.domain.model.ExportOptions
 import com.momi.watermarker.domain.model.ImageOp
 import com.momi.watermarker.domain.model.ResizeMode
@@ -90,6 +92,19 @@ class ImageOpResizeTest {
         assertEquals(200_000L, ExportOptions.bytesFromKb(200L))
         assertEquals(200L, ExportOptions.kbFromBytes(200_000L))
         assertEquals(ExportOptions.MIN_TARGET_SIZE_BYTES, ExportOptions.bytesFromKb(0L))
+    }
+
+    @Test
+    fun `fit to size needs a budget and a lossy format`() {
+        val jpeg = ExportOptions(
+            format = ExportFormat.JPEG,
+            mode = CompressionMode.FIT_TO_SIZE,
+            targetSizeBytes = 200_000L,
+        )
+        assertTrue(jpeg.usesFitToSize)
+        assertFalse(jpeg.usesTargetSize)
+        val png = jpeg.copy(format = ExportFormat.PNG)
+        assertFalse(png.usesFitToSize)
     }
 
     @Test

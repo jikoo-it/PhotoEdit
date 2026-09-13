@@ -164,9 +164,14 @@ class ImageStorage @Inject constructor(
      * mode) and returns a `content://` URI. The file carries the format's
      * extension so downstream consumers (and the gallery export) get the right
      * type. In [CompressionMode.TARGET_SIZE] the quality is chosen to fit the
-     * size budget.
+     * size budget. In [CompressionMode.FIT_TO_SIZE] pixels are shrunk first
+     * when quality-only cannot hit the budget.
      */
     fun writeToCache(bitmap: Bitmap, prefix: String, export: ExportOptions): Uri {
+        if (export.usesFitToSize) {
+            val target = export.targetSizeBytes
+            if (target != null) return writeFittedToCache(bitmap, target, export.format)
+        }
         val dir = File(context.cacheDir, SHARED_DIR).apply { mkdirs() }
         val file = File(dir, "${prefix}_${System.currentTimeMillis()}.${export.format.extension}")
         val bytes = encodeToBytes(bitmap, export)
@@ -175,8 +180,13 @@ class ImageStorage @Inject constructor(
     }
 
     /** The number of bytes [bitmap] would occupy when encoded per [export]. */
-    fun measureEncodedSize(bitmap: Bitmap, export: ExportOptions): Long =
-        encodeToBytes(bitmap, export).size.toLong()
+    fun measureEncodedSize(bitmap: Bitmap, export: ExportOptions): Long {
+        if (export.usesFitToSize) {
+            val target = export.targetSizeBytes ?: return encodeToBytes(bitmap, export).size.toLong()
+            return suggestSizeFit(bitmap, target, export.format).estimatedBytes
+        }
+        return encodeToBytes(bitmap, export).size.toLong()
+    }
 
     /**
      * Current encoded size plus, in target-size mode, a resize+compress

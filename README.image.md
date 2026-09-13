@@ -1,13 +1,13 @@
 # Bulk Image Processing
 
-The **Bulk Image Processing** flow applies one edit stack identically to a whole
-**batch** of images in a single pass. Pick one or many photos from the
-**gallery** or **camera**, stack up edits — crop, transform, resize, filters,
-adjustments, pixelate, frame, and watermark — preview the result live, and save
-every image back to your gallery.
+The **Bulk Image Processing** card on the launch screen opens the editor:
+pick one or many photos from the **gallery** or **camera**, stack up edits —
+crop, transform, resize, aspect ratio, filters, adjustments, pixelate, frame,
+watermark, and compress — preview the result live, and save every image back
+to your gallery.
 
-Need only resize, compress, or a file-size budget, without the rest of the
-editor? Use the dedicated **[Resize & Compress](README.resize.md)** flow.
+Resize, aspect ratio, and compress (including **fit to file size**) are tools
+in the top row; see **[README.resize.md](README.resize.md)**.
 
 > **Single Image Processing** — a separate flow for one photo at a time (cut-out,
 > portrait look, background blur, backdrops) lives in [README.studio.md](README.studio.md).
@@ -32,7 +32,7 @@ sensible order to every image in the batch.
 | **Pixelate** | Mosaic effect — averages each *N×N* block into one color. |
 | **Frame** | Decorative frames: Solid border, Inset mat, Rounded corners (transparent outside), or a soft drop Shadow — with an option to make the frame background **transparent** instead of filled. |
 | **Watermark** | Text watermark with pattern (Center, four corners, Tiled, Diagonal), editable text, color, font, opacity, and size. |
-| **Export** | Encode as JPEG / PNG / WebP. Choose a fixed **quality**, or a **target file size** (100 / 250 / 500 KB / 1 MB, plus a custom KB field) and let the app search for the best quality that fits. Quality-only: if the budget still can't be hit, use the dedicated [Resize & Compress](README.resize.md) **Fit to file size** op. |
+| **Export / Compress** | Encode as JPEG / PNG / WebP. Choose a fixed **quality**, a **target file size** (quality-only search), or **Fit to size** (shrink pixels if needed, then compress). Presets plus a custom KB field. |
 
 ## How the pipeline composes
 

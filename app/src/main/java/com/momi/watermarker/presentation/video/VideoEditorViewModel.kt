@@ -80,6 +80,8 @@ class VideoEditorViewModel @Inject constructor(
                 durationMs = 0L,
                 keepRanges = emptyList(),
                 resultClip = null,
+                showDemoPreview = false,
+                isSaved = false,
             )
         }
         viewModelScope.launch {
@@ -104,13 +106,14 @@ class VideoEditorViewModel @Inject constructor(
                 // One reframe slot per source (defaults to keeping each source's ratio).
                 mergeAspects = List(uris.size) { AspectRatioOption.ORIGINAL },
                 resultClip = null,
+                showDemoPreview = false,
             )
         }
     }
 
     /** Per-source reframe for a merged clip. */
     fun onMergeAspectChanged(index: Int, option: AspectRatioOption) {
-        _uiState.update { state ->
+        updateEditing { state ->
             state.copy(
                 mergeAspects = state.mergeAspects.mapIndexed { i, o ->
                     if (i == index) option else o
@@ -121,12 +124,12 @@ class VideoEditorViewModel @Inject constructor(
 
     /** Selects the whole-video color look. */
     fun onColorFilterSelected(filter: VideoColorFilter) {
-        _uiState.update { it.copy(colorFilter = filter).invalidatingResult() }
+        updateEditing { it.copy(colorFilter = filter).invalidatingResult() }
     }
 
     /** An overlay image was picked. Clears any crop from a previous image. */
     fun onOverlaySelected(uri: String) {
-        _uiState.update {
+        updateEditing {
             it.copy(overlayUri = uri, overlayCropRect = null, overlayCropShape = CropShape.RECTANGLE)
                 .invalidatingResult()
         }
@@ -134,37 +137,37 @@ class VideoEditorViewModel @Inject constructor(
 
     /** Switches between an image/logo overlay and a text overlay. */
     fun onOverlayModeChanged(mode: OverlayMode) {
-        _uiState.update { it.copy(overlayMode = mode).invalidatingResult() }
+        updateEditing { it.copy(overlayMode = mode).invalidatingResult() }
     }
 
     fun onOverlayTextChanged(text: String) {
-        _uiState.update { it.copy(overlayText = text).invalidatingResult() }
+        updateEditing { it.copy(overlayText = text).invalidatingResult() }
     }
 
     fun onOverlayTextColorChanged(argb: Int) {
-        _uiState.update { it.copy(overlayTextColorArgb = argb).invalidatingResult() }
+        updateEditing { it.copy(overlayTextColorArgb = argb).invalidatingResult() }
     }
 
     fun onOverlayPositionChanged(position: OverlayPosition) {
-        _uiState.update { it.copy(overlayPosition = position).invalidatingResult() }
+        updateEditing { it.copy(overlayPosition = position).invalidatingResult() }
     }
 
     fun onOverlaySizeChanged(fraction: Float) {
-        _uiState.update {
+        updateEditing {
             it.copy(overlaySizeFraction = fraction.coerceIn(0.02f, 1f)).invalidatingResult()
         }
     }
 
     /** Stores a crop chosen for the overlay image. */
     fun onOverlayCropChanged(rect: NormalizedRect, shape: CropShape) {
-        _uiState.update {
+        updateEditing {
             it.copy(overlayCropRect = rect, overlayCropShape = shape).invalidatingResult()
         }
     }
 
     /** Clears the overlay-image crop (back to the whole image). */
     fun onOverlayCropCleared() {
-        _uiState.update {
+        updateEditing {
             it.copy(overlayCropRect = null, overlayCropShape = CropShape.RECTANGLE)
                 .invalidatingResult()
         }
@@ -173,7 +176,7 @@ class VideoEditorViewModel @Inject constructor(
     /** Images were picked for a slideshow, in the order chosen. */
     fun onSlidesSelected(uris: List<String>) {
         val slides = uris.map { SlideItem(uri = it) }
-        _uiState.update {
+        updateEditing {
             it.copy(slides = slides, transitions = defaultTransitions(slides.size))
                 .invalidatingResult()
         }
@@ -182,7 +185,7 @@ class VideoEditorViewModel @Inject constructor(
     // --- Slideshow controls ---------------------------------------------------
 
     fun onSlideDurationChanged(index: Int, durationMs: Long) {
-        _uiState.update { state ->
+        updateEditing { state ->
             state.copy(
                 slides = state.slides.mapIndexed { i, slide ->
                     if (i == index) slide.copy(durationMs = durationMs.coerceAtLeast(200L)) else slide
@@ -192,7 +195,7 @@ class VideoEditorViewModel @Inject constructor(
     }
 
     fun onSlideTransitionChanged(boundaryIndex: Int, transition: SlideTransition) {
-        _uiState.update { state ->
+        updateEditing { state ->
             state.copy(
                 transitions = state.transitions.mapIndexed { i, t ->
                     if (i == boundaryIndex) transition else t
@@ -202,17 +205,17 @@ class VideoEditorViewModel @Inject constructor(
     }
 
     fun onTransitionDurationChanged(durationMs: Long) {
-        _uiState.update {
+        updateEditing {
             it.copy(transitionDurationMs = durationMs.coerceIn(100L, 3_000L)).invalidatingResult()
         }
     }
 
     fun onSlideshowAspectSelected(option: AspectRatioOption) {
-        _uiState.update { it.copy(slideshowAspect = option).invalidatingResult() }
+        updateEditing { it.copy(slideshowAspect = option).invalidatingResult() }
     }
 
     fun onReorderSlide(from: Int, to: Int) {
-        _uiState.update { state ->
+        updateEditing { state ->
             val list = state.slides.toMutableList()
             if (from in list.indices && to in list.indices) {
                 list.add(to, list.removeAt(from))
@@ -224,7 +227,7 @@ class VideoEditorViewModel @Inject constructor(
     }
 
     fun onRemoveSlide(index: Int) {
-        _uiState.update { state ->
+        updateEditing { state ->
             val list = state.slides.filterIndexed { i, _ -> i != index }
             state.copy(slides = list, transitions = defaultTransitions(list.size))
                 .invalidatingResult()
@@ -244,7 +247,7 @@ class VideoEditorViewModel @Inject constructor(
      * a centered slice the user can drag.
      */
     fun onExcludeSectionsChanged(exclude: Boolean) {
-        _uiState.update { state ->
+        updateEditing { state ->
             val duration = state.durationMs
             val nextRanges =
                 if (exclude && duration > 0L && state.keepRanges.complementWithin(duration).isEmpty()) {
@@ -258,6 +261,7 @@ class VideoEditorViewModel @Inject constructor(
 
     fun onAddKeepRange() {
         val state = _uiState.value
+        if (state.isDemoPreview) return
         val duration = state.durationMs
         if (duration <= 0L) return
         _uiState.update {
@@ -268,7 +272,9 @@ class VideoEditorViewModel @Inject constructor(
     }
 
     fun onKeepRangeChanged(index: Int, startMs: Long, endMs: Long) {
-        val duration = _uiState.value.durationMs
+        val state = _uiState.value
+        if (state.isDemoPreview) return
+        val duration = state.durationMs
         if (duration <= 0L) return
         val start = startMs.coerceIn(0L, duration)
         val end = endMs.coerceIn(start, duration)
@@ -283,7 +289,7 @@ class VideoEditorViewModel @Inject constructor(
 
     /** Sets the playback speed of one kept range. */
     fun onKeepRangeSpeedChanged(index: Int, speed: Float) {
-        _uiState.update {
+        updateEditing {
             it.copy(
                 keepRanges = it.keepRanges.mapIndexed { i, range ->
                     if (i == index) range.copy(speed = speed.coerceIn(0.25f, 4f)) else range
@@ -293,22 +299,22 @@ class VideoEditorViewModel @Inject constructor(
     }
 
     fun onRemoveKeepRange(index: Int) {
-        _uiState.update {
+        updateEditing {
             it.copy(keepRanges = it.keepRanges.filterIndexed { i, _ -> i != index })
                 .invalidatingResult()
         }
     }
 
     fun onAspectRatioSelected(option: AspectRatioOption) {
-        _uiState.update { it.copy(aspectRatio = option).invalidatingResult() }
+        updateEditing { it.copy(aspectRatio = option).invalidatingResult() }
     }
 
     fun onOverlayAlphaChanged(alpha: Float) {
-        _uiState.update { it.copy(overlayAlpha = alpha.coerceIn(0f, 1f)).invalidatingResult() }
+        updateEditing { it.copy(overlayAlpha = alpha.coerceIn(0f, 1f)).invalidatingResult() }
     }
 
     fun onReorderSource(from: Int, to: Int) {
-        _uiState.update { state ->
+        updateEditing { state ->
             val list = state.sources.toMutableList()
             val aspects = state.mergeAspects.toMutableList()
             if (from in list.indices && to in list.indices) {
@@ -322,10 +328,26 @@ class VideoEditorViewModel @Inject constructor(
         }
     }
 
+    fun onDemoPreviewChanged(demo: Boolean) {
+        _uiState.update { state ->
+            if (state.resultClip == null) state.copy(showDemoPreview = false)
+            else state.copy(showDemoPreview = demo)
+        }
+    }
+
+    fun onOutputFileNameChanged(name: String) {
+        _uiState.update { it.copy(outputFileName = name) }
+    }
+
     /** Drops any previewed result so a stale export can't be saved after edits. */
     private fun VideoEditorUiState.invalidatingResult(): VideoEditorUiState =
-        if (resultClip == null && !isSaved) this
-        else copy(resultClip = null, isSaved = false)
+        if (resultClip == null && !isSaved && !showDemoPreview) this
+        else copy(resultClip = null, isSaved = false, showDemoPreview = false)
+
+    /** Ignores control changes while the demo (result) is showing. */
+    private fun updateEditing(transform: (VideoEditorUiState) -> VideoEditorUiState) {
+        _uiState.update { state -> if (state.isDemoPreview) state else transform(state) }
+    }
 
     // --- Export ---------------------------------------------------------------
 
@@ -333,14 +355,14 @@ class VideoEditorViewModel @Inject constructor(
     fun onProcessRequested() {
         val state = _uiState.value
         val op = state.op
-        if (op == null || !state.canExport) {
+        if (op == null || state.isDemoPreview || !state.canExport) {
             emitMessage(R.string.error_finish_setup)
             return
         }
         val source = state.primarySource
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isExporting = true, resultClip = null, isSaved = false) }
+            _uiState.update { it.copy(isExporting = true, resultClip = null, isSaved = false, showDemoPreview = false) }
             val edited: Outcome<VideoClip> = when (op) {
                 VideoOp.CUT_JOIN ->
                     cutAndJoin(source!!, state.resolvedKeepRanges)
@@ -376,7 +398,7 @@ class VideoEditorViewModel @Inject constructor(
             }
             when (edited) {
                 is Outcome.Success -> {
-                    _uiState.update { it.copy(resultClip = edited.data) }
+                    _uiState.update { it.copy(resultClip = edited.data, showDemoPreview = true) }
                     emitMessage(R.string.op_ready_preview, appContext.getString(op.titleRes))
                 }
                 is Outcome.Failure ->
@@ -394,14 +416,15 @@ class VideoEditorViewModel @Inject constructor(
     fun onSaveRequested() {
         val state = _uiState.value
         val result = state.resultClip
-        if (result == null) {
+        if (result == null || !state.isDemoPreview) {
             emitMessage(R.string.error_preview_first)
             return
         }
         val op = state.op
         viewModelScope.launch {
             _uiState.update { it.copy(isSaving = true) }
-            val name = "MomiVideo_${op?.name?.lowercase() ?: "clip"}_${System.currentTimeMillis()}"
+            val fallback = "MomiVideo_${op?.name?.lowercase() ?: "clip"}_${System.currentTimeMillis()}"
+            val name = resolveVideoDisplayName(state.outputFileName, fallback)
             when (val saved = saveVideo(result, name)) {
                 is Outcome.Success -> {
                     _uiState.update { it.copy(isSaved = true) }

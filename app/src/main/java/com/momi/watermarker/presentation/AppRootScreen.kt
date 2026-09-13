@@ -1,7 +1,6 @@
 package com.momi.watermarker.presentation
 
 import androidx.annotation.StringRes
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +29,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.momi.watermarker.R
-import com.momi.watermarker.presentation.batch.BatchResizeScreen
 import com.momi.watermarker.presentation.editor.EditorScreen
 import com.momi.watermarker.presentation.settings.SettingsScreen
 import com.momi.watermarker.presentation.studio.StudioScreen
@@ -39,7 +37,6 @@ import com.momi.watermarker.presentation.video.VideoEditorScreen
 /** The top-level flows the app offers. */
 enum class AppSection(@StringRes val titleRes: Int, @StringRes val subtitleRes: Int) {
     IMAGE(R.string.section_image_title, R.string.section_image_subtitle),
-    RESIZE_COMPRESS(R.string.section_resize_compress_title, R.string.section_resize_compress_subtitle),
     SINGLE_IMAGE(R.string.section_single_image_title, R.string.section_single_image_subtitle),
     VIDEO(R.string.section_video_title, R.string.section_video_subtitle),
 }
@@ -66,12 +63,7 @@ fun AppRootScreen(modifier: Modifier = Modifier) {
             onOpenSettings = { showSettings = true },
         )
 
-        section == AppSection.IMAGE -> {
-            BackHandler { section = null }
-            EditorScreen(modifier = modifier)
-        }
-
-        section == AppSection.RESIZE_COMPRESS -> BatchResizeScreen(
+        section == AppSection.IMAGE -> EditorScreen(
             modifier = modifier,
             onExit = { section = null },
         )

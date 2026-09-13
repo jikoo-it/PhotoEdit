@@ -167,8 +167,8 @@ All on branch `feature/image-processing-suite`.
 Not part of Phases 0–5, but now shipped:
 
 - **Exact pixel resize** (`ResizeMode.EXACT`) with an aspect-ratio lock, plus a
-  **custom KB** field next to target-size presets in Export.
-- Dedicated **[Resize & Compress](../README.resize.md)** home flow: bulk
-  dimensions, compress, or per-image **fit to file size**
-  (`FitImagesToSizeUseCase`).
+  **custom KB** field next to target-size presets in Compress.
+- **Fit to size** (`CompressionMode.FIT_TO_SIZE`) on the Compress tool: shrink
+  (aspect kept) only if quality-only cannot hit the budget
+  (`ImageStorage.writeFittedToCache`).
 

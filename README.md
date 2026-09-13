@@ -9,11 +9,10 @@ The app is organized into separate flows, each documented in its own README:
 
 - **[Bulk Image Processing](README.image.md)** — apply one edit stack (crop,
   transform, resize, aspect-ratio padding, filters, adjustments, pixelate,
-  frame, watermark, export) identically to a whole batch of images in a single
-  pass.
-- **[Resize & Compress](README.resize.md)** — dedicated bulk jobs: change pixel
-  dimensions, compress (quality or target KB), or fit each photo independently
-  to a file-size budget.
+  frame, watermark, compress) identically to a whole batch of images in a
+  single pass. Resize, aspect ratio, and compress (quality, target KB, or
+  per-image **[fit to file size](README.resize.md)**) live in the editor tool
+  row.
 - **[Single Image Processing](README.studio.md)** — one photo, one layer stack:
   cut-out (auto outline you can drag before confirming, or trace by hand),
   portrait look (subject in color, rest black and white), background blur
@@ -37,9 +36,8 @@ packages specific to each.
 
 ```
 presentation/            UI (Jetpack Compose) + MVVM
-  AppRootScreen.kt       Chooser between bulk-image, resize/compress, single-image, and video
+  AppRootScreen.kt       Chooser between bulk-image, single-image, and video
   editor/                Bulk image editor     → README.image.md
-  batch/                 Resize & Compress     → README.resize.md
   studio/                Layered single-image  → README.studio.md
   portrait/              Portrait ML processor (used by Studio; screen unused)
   cutout/                Cut-out ML processor  (used by Studio; screen unused)

@@ -5,6 +5,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
 import android.provider.MediaStore
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.PickVisualMediaRequest
@@ -147,10 +148,13 @@ private const val WHITE_ARGB = 0xFFFFFFFF.toInt()
 fun EditorScreen(
     modifier: Modifier = Modifier,
     viewModel: EditorViewModel = hiltViewModel(),
+    onExit: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+
+    BackHandler { onExit() }
 
     // Holds the destination the camera is currently writing into.
     var pendingCaptureUri by rememberSaveable { mutableStateOf<String?>(null) }
@@ -222,6 +226,9 @@ fun EditorScreen(
             topBar = {
                 TopAppBar(
                     title = { Text(stringResource(R.string.editor_title)) },
+                    navigationIcon = {
+                        TextButton(onClick = onExit) { Text(stringResource(R.string.navigate_back)) }
+                    },
                     actions = {
                         if (uiState.hasImage) {
                             IconButton(onClick = viewModel::onUndo, enabled = uiState.canUndo) {
@@ -1123,15 +1130,16 @@ private fun ExportControls(
 
         if (export.format.supportsQuality) {
             ControlLabel(stringResource(R.string.label_compression))
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                CompressionMode.entries.forEachIndexed { index, mode ->
-                    SegmentedButton(
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CompressionMode.entries.forEach { mode ->
+                    FilterChip(
                         selected = export.mode == mode,
                         onClick = { viewModel.onCompressionModeSelected(mode) },
-                        shape = SegmentedButtonDefaults.itemShape(index, CompressionMode.entries.size),
-                    ) {
-                        Text(stringResource(if (mode == CompressionMode.QUALITY) R.string.compression_quality else R.string.compression_target_size))
-                    }
+                        label = { Text(stringResource(mode.labelRes)) },
+                    )
                 }
             }
 
@@ -1149,7 +1157,8 @@ private fun ExportControls(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                CompressionMode.TARGET_SIZE -> {
+                CompressionMode.TARGET_SIZE,
+                CompressionMode.FIT_TO_SIZE -> {
                     ControlLabel(stringResource(R.string.label_target_size))
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         ExportOptions.TARGET_SIZE_PRESETS.forEachIndexed { index, bytes ->
@@ -1174,7 +1183,13 @@ private fun ExportControls(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        text = stringResource(R.string.target_size_hint),
+                        text = stringResource(
+                            if (export.mode == CompressionMode.FIT_TO_SIZE) {
+                                R.string.fit_size_hint
+                            } else {
+                                R.string.target_size_hint
+                            },
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

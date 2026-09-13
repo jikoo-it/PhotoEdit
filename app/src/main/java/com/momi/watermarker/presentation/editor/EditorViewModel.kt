@@ -355,8 +355,11 @@ class EditorViewModel @Inject constructor(
 
     fun onCompressionModeSelected(mode: CompressionMode) =
         updateExport(tag = null) { export ->
-            val target = if (mode == CompressionMode.TARGET_SIZE) {
-                export.targetSizeBytes ?: ExportOptions.TARGET_SIZE_PRESETS.first()
+            val needsBudget = mode == CompressionMode.TARGET_SIZE || mode == CompressionMode.FIT_TO_SIZE
+            val target = if (needsBudget) {
+                export.targetSizeBytes
+                    ?: if (mode == CompressionMode.FIT_TO_SIZE) 200_000L
+                    else ExportOptions.TARGET_SIZE_PRESETS.first()
             } else {
                 export.targetSizeBytes
             }

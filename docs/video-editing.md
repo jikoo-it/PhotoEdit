@@ -230,3 +230,7 @@ plus `round(D·fps)` baked frames (fps 24, JPEG, ≤1280px long edge). `D` clamp
 - **2026-09-13** — **Exclude sections** on Trim / Cut & Join: a toggle marks ranges to *cut out*
   instead of keep; leftovers are inverted (`TrimRange.complementWithin`) and joined. Default
   exclude window is a centered slice so the whole clip isn't dropped.
+- **2026-09-13** — Trim / Cut & Join ranges are editable in **milliseconds** (typed start/end
+  plus slider). Segment labels and the ExoPlayer preview clock show `m:ss.SSS`.
+- **2026-09-13** — Apply plays the result in the **top player** (Original / Demo toggle).
+  Demo locks the op controls and is the only mode that can save; optional file name.

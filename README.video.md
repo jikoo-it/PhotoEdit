@@ -12,7 +12,7 @@ the gallery.
 
 | Op | What it does |
 | --- | --- |
-| **Trim / Cut & Join** | Keep one section of a video (trim), or several sections stitched together in order — **or** turn on **Exclude sections** and mark the parts to cut out; the leftover is joined. Trim is the single-segment keep case. Each *kept* section also has its own **playback speed** (0.25×–4×, slow-mo to fast-forward), applied to both audio and video. |
+| **Trim / Cut & Join** | Keep one section of a video (trim), or several sections stitched together in order — **or** turn on **Exclude sections** and mark the parts to cut out; the leftover is joined. Trim is the single-segment keep case. Ranges are chosen with millisecond precision: type start/end in **ms**, or drag the slider; labels and the preview clock use `m:ss.SSS`. Each *kept* section also has its own **playback speed** (0.25×–4×, slow-mo to fast-forward), applied to both audio and video. |
 | **Merge** | Concatenate multiple videos into one. Each clip can be **reframed independently** (16:9, 1:1, 9:16, 4:3, or its original ratio) so mismatched sources line up. Clips with differing audio presence are reconciled via `experimentalSetForceAudioTrack`. |
 | **Remove Sound** | Strip the audio track (`EditedMediaItem.setRemoveAudio`). |
 | **Aspect Ratio** | Reframe to 16:9, 1:1, 9:16, or 4:3 (`Presentation.createForAspectRatio`, scale-to-fit-with-crop). |
@@ -20,9 +20,11 @@ the gallery.
 | **Overlay** | Stamp an **image/logo** *or* a line of **text** over every frame. Images can be **cropped** (reusing the photo cropper, shaped masks included) and **resized**; text has a color picker and size. Both choose one of **nine anchor positions** and an opacity (`OverlayEffect` + `BitmapOverlay` with overlay/background frame anchors). |
 | **Images → Video (slideshow)** | Turn photos into a video: set **each image's on-screen duration** and pick from **~29 real transitions** at every boundary independently (dissolve, fades, wipes, pushes, covers/reveals, zoom, iris, blinds, checker, diagonal, rotate — see [Slideshow transitions](#slideshow-transitions)), with a shared transition length and an output aspect ratio. |
 
-Every flow ends in **preview-before-save**: the export runs, the result plays in
-an ExoPlayer preview, and only then is "Save to gallery" offered. Editing any
-control after a preview invalidates the stale result so it can't be saved.
+Every flow ends in **preview-before-save** in the **same top player**: Apply
+replaces the original with the result (**Demo**). A toggle above the player
+switches back to **Original** to keep editing (controls are locked in Demo).
+Save is offered only in Demo; you can type a file name or leave it blank for
+an auto name. Editing after switching to Original drops the stale result.
 
 ## Slideshow transitions
 
@@ -105,7 +107,8 @@ presentation/video/
   VideoEditorViewModel.kt  StateFlow<VideoEditorUiState> + effects channel
   VideoEditorUiState.kt    VideoOp, AspectRatioOption, OverlayMode, SlideItem,
                            UI state
-  VideoComponents.kt       ExoPlayer preview embedded via AndroidView
+  VideoComponents.kt       ExoPlayer preview (m:ss.SSS clock) via AndroidView
+  Timecode.kt              Millisecond timecode formatting
 
 domain/
   model/                   VideoClip, VideoSegment, VideoEditRequest, TrimRange

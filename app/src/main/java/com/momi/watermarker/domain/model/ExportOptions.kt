@@ -1,12 +1,21 @@
 package com.momi.watermarker.domain.model
 
+import androidx.annotation.StringRes
+import com.momi.watermarker.R
+
 /** How the export quality is decided. */
-enum class CompressionMode {
+enum class CompressionMode(@StringRes val labelRes: Int) {
     /** Encode once at a fixed [ExportOptions.quality]. */
-    QUALITY,
+    QUALITY(R.string.compression_quality),
 
     /** Search for the highest quality whose encoded size fits [ExportOptions.targetSizeBytes]. */
-    TARGET_SIZE,
+    TARGET_SIZE(R.string.compression_target_size),
+
+    /**
+     * Shrink pixels (aspect kept) only if quality-only compression cannot hit
+     * [ExportOptions.targetSizeBytes], then encode to that budget.
+     */
+    FIT_TO_SIZE(R.string.compression_fit_to_size),
 }
 
 /**
@@ -44,6 +53,12 @@ data class ExportOptions(
      */
     val usesTargetSize: Boolean
         get() = mode == CompressionMode.TARGET_SIZE &&
+            targetSizeBytes != null &&
+            format.supportsQuality
+
+    /** Whether pixels may be shrunk so the encoded file hits the size budget. */
+    val usesFitToSize: Boolean
+        get() = mode == CompressionMode.FIT_TO_SIZE &&
             targetSizeBytes != null &&
             format.supportsQuality
 

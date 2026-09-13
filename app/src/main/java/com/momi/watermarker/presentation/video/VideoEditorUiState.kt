@@ -88,13 +88,24 @@ data class VideoEditorUiState(
     val isExporting: Boolean = false,
     val isSaving: Boolean = false,
     val isSaved: Boolean = false,
+    /**
+     * When a [resultClip] exists, the top player shows that result (demo)
+     * rather than the original source.
+     */
+    val showDemoPreview: Boolean = false,
+    /** Optional gallery file name (no extension); blank uses an auto name. */
+    val outputFileName: String = "",
 ) {
     val primarySource: VideoClip? get() = sources.firstOrNull()
     val hasVideo: Boolean get() = sources.isNotEmpty()
     val isReady: Boolean get() = hasVideo && durationMs > 0L
 
-    /** The clip to show in the preview player: the result if present, else the first source. */
-    val previewUri: String? get() = resultClip?.uri ?: primarySource?.uri
+    /** Demo is the processed result playing in the top player. */
+    val isDemoPreview: Boolean get() = showDemoPreview && resultClip != null
+
+    /** URI for the top player: demo result, else the first source. */
+    val playerUri: String?
+        get() = if (isDemoPreview) resultClip?.uri else primarySource?.uri
 
     /**
      * Ranges actually sent to cut-and-join: the marked windows as-is, or the

@@ -65,6 +65,7 @@ import coil.compose.AsyncImage
 import com.momi.watermarker.domain.model.OverlayPosition
 import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoColorFilter
+import com.momi.watermarker.presentation.editor.components.DigitField
 import com.momi.watermarker.presentation.editor.components.ImageCropperScreen
 
 /**
@@ -188,60 +189,75 @@ private fun OperationContent(
 
     // The overlay image currently open in the full-screen cropper, if any.
     var overlayCropUri by remember { mutableStateOf<String?>(null) }
+    val scrollState = rememberScrollState()
+
+    LaunchedEffect(uiState.isDemoPreview) {
+        if (uiState.isDemoPreview) scrollState.animateScrollTo(0)
+    }
 
     Box(modifier = modifier) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         // Slideshow works from images, not a source video, so it skips the
-        // video preview + video picker and drives everything from its own list.
-        if (op != VideoOp.SLIDESHOW) {
-            VideoPreview(
-                uri = uiState.primarySource?.uri,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(16.dp)),
+        // player until a demo result exists.
+        if (op != VideoOp.SLIDESHOW || uiState.resultClip != null) {
+            SourcePlayerSection(
+                uiState = uiState,
+                viewModel = viewModel,
                 placeholder = stringResource(
-                    if (op == VideoOp.MERGE) R.string.pick_videos_to_merge
-                    else R.string.choose_video_to_begin,
+                    when {
+                        op == VideoOp.SLIDESHOW -> R.string.slideshow_empty_hint
+                        op == VideoOp.MERGE -> R.string.pick_videos_to_merge
+                        else -> R.string.choose_video_to_begin
+                    },
                 ),
             )
 
-            // --- Source picking -----------------------------------------------
-            if (op == VideoOp.MERGE) {
-                OutlinedButton(
-                    onClick = {
-                        videosPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(if (uiState.hasVideo) R.string.pick_different_videos else R.string.pick_videos)) }
-            } else {
-                OutlinedButton(
-                    onClick = {
-                        videoPicker.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(if (uiState.hasVideo) R.string.choose_different_video else R.string.choose_a_video)) }
+            if (op != VideoOp.SLIDESHOW) {
+                val pickingEnabled = !uiState.isDemoPreview
+                if (op == VideoOp.MERGE) {
+                    OutlinedButton(
+                        onClick = {
+                            videosPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
+                            )
+                        },
+                        enabled = pickingEnabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(if (uiState.hasVideo) R.string.pick_different_videos else R.string.pick_videos)) }
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            videoPicker.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
+                            )
+                        },
+                        enabled = pickingEnabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(if (uiState.hasVideo) R.string.choose_different_video else R.string.choose_a_video)) }
+                }
             }
         }
+
+        val controlsEnabled = !uiState.isDemoPreview
 
         // --- Per-op controls --------------------------------------------------
         when (op) {
             VideoOp.CUT_JOIN -> if (uiState.isReady) {
-                CutJoinControls(uiState = uiState, viewModel = viewModel)
+                CutJoinControls(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    enabled = controlsEnabled,
+                )
             }
 
             VideoOp.MERGE -> if (uiState.hasVideo) {
-                MergeList(uiState = uiState, viewModel = viewModel)
+                MergeList(uiState = uiState, viewModel = viewModel, enabled = controlsEnabled)
             }
 
             VideoOp.REMOVE_AUDIO -> if (uiState.hasVideo) {
@@ -256,6 +272,7 @@ private fun OperationContent(
                 AspectRatioControls(
                     selected = uiState.aspectRatio,
                     onSelect = viewModel::onAspectRatioSelected,
+                    enabled = controlsEnabled,
                 )
             }
 
@@ -263,6 +280,7 @@ private fun OperationContent(
                 FilterControls(
                     selected = uiState.colorFilter,
                     onSelect = viewModel::onColorFilterSelected,
+                    enabled = controlsEnabled,
                 )
             }
 
@@ -270,6 +288,7 @@ private fun OperationContent(
                 OverlayControls(
                     uiState = uiState,
                     viewModel = viewModel,
+                    enabled = controlsEnabled,
                     onPickImage = {
                         imagePicker.launch(
                             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -282,6 +301,7 @@ private fun OperationContent(
             VideoOp.SLIDESHOW -> SlideshowControls(
                 uiState = uiState,
                 viewModel = viewModel,
+                enabled = controlsEnabled,
                 onPickImages = {
                     imagesPicker.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
@@ -290,48 +310,18 @@ private fun OperationContent(
             )
         }
 
-        // --- Apply / preview --------------------------------------------------
-        Button(
-            onClick = viewModel::onProcessRequested,
-            enabled = uiState.canExport,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (uiState.isExporting) {
-                CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                Text(stringResource(R.string.action_processing))
-            } else {
-                Text(stringResource(R.string.apply_op_and_preview, stringResource(op.titleRes)))
-            }
-        }
-
-        // --- Result: preview, then save --------------------------------------
-        val result = uiState.resultClip
-        if (result != null) {
-            HorizontalDivider()
-            Text(
-                stringResource(R.string.result_preview_title),
-                style = MaterialTheme.typography.titleMedium,
-            )
-            VideoPreview(
-                uri = result.uri,
-                autoPlay = true,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(16.dp)),
-            )
+        // Apply stays on the original; demo is saved from the player section.
+        if (!uiState.isDemoPreview) {
             Button(
-                onClick = viewModel::onSaveRequested,
-                enabled = !uiState.isSaving && !uiState.isSaved,
+                onClick = viewModel::onProcessRequested,
+                enabled = uiState.canExport,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                when {
-                    uiState.isSaving -> {
-                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-                        Text(stringResource(R.string.action_saving))
-                    }
-                    uiState.isSaved -> Text(stringResource(R.string.action_saved_to_gallery))
-                    else -> Text(stringResource(R.string.action_save_to_gallery))
+                if (uiState.isExporting) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                    Text(stringResource(R.string.action_processing))
+                } else {
+                    Text(stringResource(R.string.apply_op_and_preview, stringResource(op.titleRes)))
                 }
             }
         }
@@ -352,10 +342,90 @@ private fun OperationContent(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SourcePlayerSection(
+    uiState: VideoEditorUiState,
+    viewModel: VideoEditorViewModel,
+    placeholder: String,
+) {
+    val demo = uiState.isDemoPreview
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (uiState.resultClip != null && uiState.primarySource != null) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = !demo,
+                    onClick = { viewModel.onDemoPreviewChanged(false) },
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    enabled = !uiState.isExporting,
+                ) {
+                    Text(stringResource(R.string.video_preview_original))
+                }
+                SegmentedButton(
+                    selected = demo,
+                    onClick = { viewModel.onDemoPreviewChanged(true) },
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    enabled = !uiState.isExporting,
+                ) {
+                    Text(stringResource(R.string.video_preview_demo))
+                }
+            }
+        }
+        Box {
+            VideoPreview(
+                uri = uiState.playerUri,
+                autoPlay = demo,
+                placeholder = placeholder,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(16.dp)),
+            )
+            if (uiState.isExporting) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.Black.copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+        if (demo) {
+            OutlinedTextField(
+                value = uiState.outputFileName,
+                onValueChange = viewModel::onOutputFileNameChanged,
+                label = { Text(stringResource(R.string.save_file_name)) },
+                placeholder = { Text(stringResource(R.string.save_file_name_hint)) },
+                singleLine = true,
+                enabled = !uiState.isSaving && !uiState.isSaved,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = viewModel::onSaveRequested,
+                enabled = !uiState.isSaving && !uiState.isSaved,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                when {
+                    uiState.isSaving -> {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        Text(stringResource(R.string.action_saving))
+                    }
+                    uiState.isSaved -> Text(stringResource(R.string.action_saved_to_gallery))
+                    else -> Text(stringResource(R.string.action_save_to_gallery))
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun CutJoinControls(
     uiState: VideoEditorUiState,
     viewModel: VideoEditorViewModel,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -377,6 +447,7 @@ private fun CutJoinControls(
             Switch(
                 checked = uiState.excludeSections,
                 onCheckedChange = viewModel::onExcludeSectionsChanged,
+                enabled = enabled,
             )
         }
         Text(
@@ -385,8 +456,22 @@ private fun CutJoinControls(
             ),
             style = MaterialTheme.typography.bodyMedium,
         )
+        Text(
+            stringResource(
+                R.string.trim_clip_duration,
+                formatMs(uiState.durationMs),
+                uiState.durationMs,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(R.string.trim_time_ms_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         uiState.keepRanges.forEachIndexed { index, range ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         stringResource(R.string.segment_range, index + 1, formatMs(range.startMs), formatMs(range.endMs)),
@@ -394,7 +479,10 @@ private fun CutJoinControls(
                         modifier = Modifier.weight(1f),
                     )
                     if (uiState.keepRanges.size > 1) {
-                        TextButton(onClick = { viewModel.onRemoveKeepRange(index) }) {
+                        TextButton(
+                            onClick = { viewModel.onRemoveKeepRange(index) },
+                            enabled = enabled,
+                        ) {
                             Text(stringResource(R.string.action_remove))
                         }
                     }
@@ -405,7 +493,33 @@ private fun CutJoinControls(
                         viewModel.onKeepRangeChanged(index, r.start.toLong(), r.endInclusive.toLong())
                     },
                     valueRange = 0f..uiState.durationMs.toFloat(),
+                    enabled = enabled,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    DigitField(
+                        value = range.startMs,
+                        onValueChange = { viewModel.onKeepRangeChanged(index, it, range.endMs) },
+                        label = stringResource(R.string.trim_start),
+                        suffix = stringResource(R.string.unit_ms),
+                        allowZero = true,
+                        maxDigits = 8,
+                        enabled = enabled,
+                        modifier = Modifier.weight(1f),
+                    )
+                    DigitField(
+                        value = range.endMs,
+                        onValueChange = { viewModel.onKeepRangeChanged(index, range.startMs, it) },
+                        label = stringResource(R.string.trim_end),
+                        suffix = stringResource(R.string.unit_ms),
+                        allowZero = true,
+                        maxDigits = 8,
+                        enabled = enabled,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
                 if (!uiState.excludeSections) {
                     Text(
                         stringResource(R.string.speed_value, range.speed),
@@ -415,6 +529,7 @@ private fun CutJoinControls(
                         value = range.speed,
                         onValueChange = { viewModel.onKeepRangeSpeedChanged(index, it) },
                         valueRange = 0.25f..4f,
+                        enabled = enabled,
                     )
                 }
                 HorizontalDivider()
@@ -427,7 +542,10 @@ private fun CutJoinControls(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-        TextButton(onClick = viewModel::onAddKeepRange) { Text(stringResource(R.string.add_segment)) }
+        TextButton(
+            onClick = viewModel::onAddKeepRange,
+            enabled = enabled,
+        ) { Text(stringResource(R.string.add_segment)) }
     }
 }
 
@@ -436,6 +554,7 @@ private fun CutJoinControls(
 private fun MergeList(
     uiState: VideoEditorUiState,
     viewModel: VideoEditorViewModel,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
@@ -452,11 +571,11 @@ private fun MergeList(
                     )
                     TextButton(
                         onClick = { viewModel.onReorderSource(index, index - 1) },
-                        enabled = index > 0,
+                        enabled = enabled && index > 0,
                     ) { Text(stringResource(R.string.move_up)) }
                     TextButton(
                         onClick = { viewModel.onReorderSource(index, index + 1) },
-                        enabled = index < uiState.sources.lastIndex,
+                        enabled = enabled && index < uiState.sources.lastIndex,
                     ) { Text(stringResource(R.string.move_down)) }
                 }
                 // Per-clip reframe: "Original" keeps this clip's own ratio.
@@ -469,6 +588,7 @@ private fun MergeList(
                         FilterChip(
                             selected = option == selected,
                             onClick = { viewModel.onMergeAspectChanged(index, option) },
+                            enabled = enabled,
                             label = { Text(stringResource(option.labelRes)) },
                         )
                     }
@@ -484,6 +604,7 @@ private fun MergeList(
 private fun AspectRatioControls(
     selected: AspectRatioOption,
     onSelect: (AspectRatioOption) -> Unit,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.target_aspect_ratio), style = MaterialTheme.typography.bodyMedium)
@@ -492,6 +613,7 @@ private fun AspectRatioControls(
                 FilterChip(
                     selected = option == selected,
                     onClick = { onSelect(option) },
+                    enabled = enabled,
                     label = { Text(stringResource(option.labelRes)) },
                 )
             }
@@ -504,6 +626,7 @@ private fun AspectRatioControls(
 private fun FilterControls(
     selected: VideoColorFilter,
     onSelect: (VideoColorFilter) -> Unit,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(R.string.color_look), style = MaterialTheme.typography.bodyMedium)
@@ -515,6 +638,7 @@ private fun FilterControls(
                 FilterChip(
                     selected = filter == selected,
                     onClick = { onSelect(filter) },
+                    enabled = enabled,
                     label = { Text(stringResource(filter.labelRes)) },
                 )
             }
@@ -527,9 +651,14 @@ private fun SlideshowControls(
     uiState: VideoEditorUiState,
     viewModel: VideoEditorViewModel,
     onPickImages: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedButton(onClick = onPickImages, modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = onPickImages,
+            enabled = enabled,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text(stringResource(if (uiState.slides.isEmpty()) R.string.pick_images else R.string.pick_different_images))
         }
         if (uiState.slides.isEmpty()) {
@@ -544,6 +673,7 @@ private fun SlideshowControls(
         AspectRatioControls(
             selected = uiState.slideshowAspect,
             onSelect = viewModel::onSlideshowAspectSelected,
+            enabled = enabled,
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -555,6 +685,7 @@ private fun SlideshowControls(
                 value = uiState.transitionDurationMs.toFloat(),
                 onValueChange = { viewModel.onTransitionDurationChanged(it.toLong()) },
                 valueRange = 100f..3000f,
+                enabled = enabled,
             )
         }
 
@@ -566,11 +697,13 @@ private fun SlideshowControls(
                 slide = slide,
                 slideCount = uiState.slides.size,
                 viewModel = viewModel,
+                enabled = enabled,
             )
             if (index < uiState.slides.lastIndex) {
                 TransitionRow(
                     selected = uiState.transitions.getOrElse(index) { SlideTransition.NONE },
                     onSelect = { viewModel.onSlideTransitionChanged(index, it) },
+                    enabled = enabled,
                 )
             }
         }
@@ -583,6 +716,7 @@ private fun SlideRow(
     slide: SlideItem,
     slideCount: Int,
     viewModel: VideoEditorViewModel,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -602,14 +736,17 @@ private fun SlideRow(
             )
             TextButton(
                 onClick = { viewModel.onReorderSlide(index, index - 1) },
-                enabled = index > 0,
+                enabled = enabled && index > 0,
             ) { Text(stringResource(R.string.move_up)) }
             TextButton(
                 onClick = { viewModel.onReorderSlide(index, index + 1) },
-                enabled = index < slideCount - 1,
+                enabled = enabled && index < slideCount - 1,
             ) { Text(stringResource(R.string.move_down)) }
             if (slideCount > 2) {
-                TextButton(onClick = { viewModel.onRemoveSlide(index) }) { Text(stringResource(R.string.action_remove)) }
+                TextButton(
+                    onClick = { viewModel.onRemoveSlide(index) },
+                    enabled = enabled,
+                ) { Text(stringResource(R.string.action_remove)) }
             }
         }
         Text(
@@ -620,6 +757,7 @@ private fun SlideRow(
             value = slide.durationMs.toFloat(),
             onValueChange = { viewModel.onSlideDurationChanged(index, it.toLong()) },
             valueRange = 500f..10_000f,
+            enabled = enabled,
         )
     }
 }
@@ -629,6 +767,7 @@ private fun SlideRow(
 private fun TransitionRow(
     selected: SlideTransition,
     onSelect: (SlideTransition) -> Unit,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
@@ -644,6 +783,7 @@ private fun TransitionRow(
                 FilterChip(
                     selected = transition == selected,
                     onClick = { onSelect(transition) },
+                    enabled = enabled,
                     label = { Text(stringResource(transition.labelRes)) },
                 )
             }
@@ -659,6 +799,7 @@ private fun OverlayControls(
     viewModel: VideoEditorViewModel,
     onPickImage: () -> Unit,
     onCropImage: () -> Unit,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Image/logo vs. text overlay.
@@ -667,6 +808,7 @@ private fun OverlayControls(
                 SegmentedButton(
                     selected = uiState.overlayMode == mode,
                     onClick = { viewModel.onOverlayModeChanged(mode) },
+                    enabled = enabled,
                     shape = SegmentedButtonDefaults.itemShape(index, OverlayMode.entries.size),
                 ) {
                     Text(stringResource(if (mode == OverlayMode.IMAGE) R.string.label_image else R.string.label_text))
@@ -676,7 +818,11 @@ private fun OverlayControls(
 
         when (uiState.overlayMode) {
             OverlayMode.IMAGE -> {
-                OutlinedButton(onClick = onPickImage, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = onPickImage,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text(stringResource(if (uiState.overlayUri != null) R.string.choose_different_image else R.string.choose_overlay_image))
                 }
                 if (uiState.overlayUri != null) {
@@ -688,11 +834,18 @@ private fun OverlayControls(
                             .size(96.dp)
                             .clip(RoundedCornerShape(8.dp)),
                     )
-                    OutlinedButton(onClick = onCropImage, modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = onCropImage,
+                        enabled = enabled,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         Text(stringResource(if (uiState.overlayCropRect != null) R.string.adjust_crop_plain else R.string.crop_overlay_plain))
                     }
                     if (uiState.overlayCropRect != null) {
-                        TextButton(onClick = viewModel::onOverlayCropCleared) {
+                        TextButton(
+                            onClick = viewModel::onOverlayCropCleared,
+                            enabled = enabled,
+                        ) {
                             Text(stringResource(R.string.action_reset_crop))
                         }
                     }
@@ -706,12 +859,14 @@ private fun OverlayControls(
                     label = { Text(stringResource(R.string.overlay_text)) },
                     minLines = 1,
                     maxLines = 3,
+                    enabled = enabled,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Text(stringResource(R.string.label_text_color), style = MaterialTheme.typography.bodyMedium)
                 OverlayColorRow(
                     selectedArgb = uiState.overlayTextColorArgb,
                     onSelect = viewModel::onOverlayTextColorChanged,
+                    enabled = enabled,
                 )
             }
         }
@@ -727,6 +882,7 @@ private fun OverlayControls(
             OverlayPositionGrid(
                 selected = uiState.overlayPosition,
                 onSelect = viewModel::onOverlayPositionChanged,
+                enabled = enabled,
             )
 
             val sizeLabel = stringResource(if (uiState.overlayMode == OverlayMode.TEXT) R.string.label_text_size else R.string.label_size)
@@ -743,6 +899,7 @@ private fun OverlayControls(
                 onValueChange = viewModel::onOverlaySizeChanged,
                 // Text reads best small; images can span most of the frame.
                 valueRange = if (uiState.overlayMode == OverlayMode.TEXT) 0.03f..0.25f else 0.1f..1f,
+                enabled = enabled,
             )
 
             Text(
@@ -753,6 +910,7 @@ private fun OverlayControls(
                 value = uiState.overlayAlpha,
                 onValueChange = viewModel::onOverlayAlphaChanged,
                 valueRange = 0f..1f,
+                enabled = enabled,
             )
         }
     }
@@ -770,7 +928,11 @@ private val OVERLAY_COLORS = listOf(
 
 /** A row of tappable color swatches; the selected one is ringed. */
 @Composable
-private fun OverlayColorRow(selectedArgb: Int, onSelect: (Int) -> Unit) {
+private fun OverlayColorRow(
+    selectedArgb: Int,
+    onSelect: (Int) -> Unit,
+    enabled: Boolean = true,
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OVERLAY_COLORS.forEach { argb ->
             val selected = argb == selectedArgb
@@ -785,7 +947,7 @@ private fun OverlayColorRow(selectedArgb: Int, onSelect: (Int) -> Unit) {
                         else MaterialTheme.colorScheme.outlineVariant,
                         shape = CircleShape,
                     )
-                    .clickable { onSelect(argb) },
+                    .clickable(enabled = enabled) { onSelect(argb) },
             )
         }
     }
@@ -797,6 +959,7 @@ private fun OverlayColorRow(selectedArgb: Int, onSelect: (Int) -> Unit) {
 private fun OverlayPositionGrid(
     selected: OverlayPosition,
     onSelect: (OverlayPosition) -> Unit,
+    enabled: Boolean = true,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         OverlayPosition.entries.chunked(3).forEach { rowPositions ->
@@ -805,6 +968,7 @@ private fun OverlayPositionGrid(
                     FilterChip(
                         selected = pos == selected,
                         onClick = { onSelect(pos) },
+                        enabled = enabled,
                         label = {
                             Text(
                                 stringResource(pos.labelRes),
