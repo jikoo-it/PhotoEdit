@@ -129,7 +129,7 @@ building a different request, **not** a new pipeline. Shipped so far:
 
 | Op | How | Status |
 |---|---|---|
-| Trim / Cut & Join | N clipped segments, same source, concatenated (N=1 is a plain trim — no separate Trim op) | ✅ |
+| Trim / Cut & Join | N clipped segments, same source, concatenated (N=1 is a plain trim — no separate Trim op). Optional **exclude** mode inverts the marked ranges | ✅ |
 | Merge | N whole segments, different sources, `experimentalSetForceAudioTrack(true)` | ✅ |
 | Remove Sound | `EditedMediaItem.setRemoveAudio(true)` | ✅ |
 | Aspect Ratio | `Presentation.createForAspectRatio(r, LAYOUT_SCALE_TO_FIT_WITH_CROP)` | ✅ |
@@ -227,3 +227,6 @@ plus `round(D·fps)` baked frames (fps 24, JPEG, ≤1280px long edge). `D` clamp
   `VideoRepository.createSlideshow` (bakes off-thread, then exports baked stills); the old
   composition-wide transition path is retained for video merges only. Compiles clean; the baked
   frames + Canvas blending are deterministic, but end-to-end export needs on-device verification.
+- **2026-09-13** — **Exclude sections** on Trim / Cut & Join: a toggle marks ranges to *cut out*
+  instead of keep; leftovers are inverted (`TrimRange.complementWithin`) and joined. Default
+  exclude window is a centered slice so the whole clip isn't dropped.

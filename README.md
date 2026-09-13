@@ -11,6 +11,9 @@ The app is organized into separate flows, each documented in its own README:
   transform, resize, aspect-ratio padding, filters, adjustments, pixelate,
   frame, watermark, export) identically to a whole batch of images in a single
   pass.
+- **[Resize & Compress](README.resize.md)** — dedicated bulk jobs: change pixel
+  dimensions, compress (quality or target KB), or fit each photo independently
+  to a file-size budget.
 - **Single Image Processing** — per-photo tools, on-device:
   - **[Portrait Color](README.portrait.md)** — keep the detected person(s) in
     color, turn the background grayscale, and optionally blur it (ML Kit selfie
@@ -18,10 +21,10 @@ The app is organized into separate flows, each documented in its own README:
   - **[Cut-out Studio](README.cutout.md)** — extract the subject of one photo
     (ML Kit subject segmentation), then keep the background transparent, fill it
     with a solid color, blur the original, or replace it with another image.
-- **[Video Processing](README.video.md)** — trim, cut & join (with per-section
-  speed), merge (with per-clip framing), remove audio, change aspect ratio,
-  color filters, image/text overlays, and an images-to-video slideshow with
-  transitions.
+- **[Video Processing](README.video.md)** — trim / cut & join (keep *or* exclude
+  sections, with per-section speed), merge (with per-clip framing), remove audio,
+  change aspect ratio, color filters, image/text overlays, and an images-to-video
+  slideshow with transitions.
 
 ## Architecture
 
@@ -32,8 +35,9 @@ packages specific to each.
 
 ```
 presentation/            UI (Jetpack Compose) + MVVM
-  AppRootScreen.kt       Chooser between the bulk-image, single-image, and video flows
+  AppRootScreen.kt       Chooser between bulk-image, resize/compress, single-image, and video
   editor/                Bulk image editor     → README.image.md
+  batch/                 Resize & Compress     → README.resize.md
   single/                Single-image hub (portrait + cut-out)
   portrait/              Portrait color        → README.portrait.md
   cutout/                Single-image cut-out  → README.cutout.md

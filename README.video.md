@@ -12,7 +12,7 @@ the gallery.
 
 | Op | What it does |
 | --- | --- |
-| **Trim / Cut & Join** | Keep one section of a video (trim), or several sections stitched together in order. Trim is just the single-segment case. Each kept section also has its own **playback speed** (0.25×–4×, slow-mo to fast-forward), applied to both audio and video. |
+| **Trim / Cut & Join** | Keep one section of a video (trim), or several sections stitched together in order — **or** turn on **Exclude sections** and mark the parts to cut out; the leftover is joined. Trim is the single-segment keep case. Each *kept* section also has its own **playback speed** (0.25×–4×, slow-mo to fast-forward), applied to both audio and video. |
 | **Merge** | Concatenate multiple videos into one. Each clip can be **reframed independently** (16:9, 1:1, 9:16, 4:3, or its original ratio) so mismatched sources line up. Clips with differing audio presence are reconciled via `experimentalSetForceAudioTrack`. |
 | **Remove Sound** | Strip the audio track (`EditedMediaItem.setRemoveAudio`). |
 | **Aspect Ratio** | Reframe to 16:9, 1:1, 9:16, or 4:3 (`Presentation.createForAspectRatio`, scale-to-fit-with-crop). |
@@ -96,7 +96,7 @@ transforms (overlay, transitions) are then layered on top of every clip.
 The video suite is deliberately **independent** of image processing: it adds
 only new files (plus its own `di/VideoModule`) and never touches the
 image-processing code. It follows the same Clean Architecture + MVVM + Hilt
-layering as the rest of the app.
+layering as the rest of the app. Saves go to `Movies/MomiWaterMarker`.
 
 ```
 presentation/video/

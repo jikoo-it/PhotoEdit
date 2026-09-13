@@ -6,9 +6,8 @@ The **Bulk Image Processing** flow applies one edit stack identically to a whole
 adjustments, pixelate, frame, and watermark — preview the result live, and save
 every image back to your gallery.
 
-> **Single Image Processing** — a separate flow focused on editing one image at
-> a time (with tools that only make sense on a single photo) is planned and will
-> be documented here as it lands.
+Need only resize, compress, or a file-size budget, without the rest of the
+editor? Use the dedicated **[Resize & Compress](README.resize.md)** flow.
 
 ← Back to the [project overview](README.md). For the video flow, see
 [README.video.md](README.video.md).
@@ -23,14 +22,14 @@ sensible order to every image in the batch.
 | --- | --- |
 | **Crop** | Drag-to-crop with a live overlay. Shapes: rectangle, circle, rounded, squircle. For a non-rectangular shape, the area outside the shape is either **transparent** or **filled** with a color you pick. |
 | **Transform** | Rotate by 90° increments and flip horizontally / vertically. |
-| **Resize** | Scale by a percentage — **down to 5% or up to 400%** (upscale) — or downscale so the longest side fits a max pixel count (aspect preserved). |
+| **Resize** | **Scale** by a percentage (5%–400%), **Max size** (cap the longest side, aspect kept), or **Exact** width × height in pixels. Exact keeps aspect ratio by default; turn the lock off to stretch. |
 | **Aspect ratio** | Pad the image out to a target ratio (1:1, 16:9, 9:16, 4:3, …) **without cropping** — bars are added on the short sides, either **transparent** or a chosen fill color. Letterbox, not crop. |
 | **Filters** | Preset color filters (Mono, Sepia, Noir, Vivid, Cool, Warm, Vintage) **plus a custom RGB color tint** — pick any color (R/G/B 0–255) to wash the image. |
 | **Adjust** | Fine-grained brightness, contrast, saturation, and warmth, combined into a single `ColorMatrix`. |
 | **Pixelate** | Mosaic effect — averages each *N×N* block into one color. |
 | **Frame** | Decorative frames: Solid border, Inset mat, Rounded corners (transparent outside), or a soft drop Shadow — with an option to make the frame background **transparent** instead of filled. |
 | **Watermark** | Text watermark with pattern (Center, four corners, Tiled, Diagonal), editable text, color, font, opacity, and size. |
-| **Export** | Encode as JPEG / PNG / WebP. Choose a fixed **quality**, or a **target file size** and let the app search for the best quality that fits. |
+| **Export** | Encode as JPEG / PNG / WebP. Choose a fixed **quality**, or a **target file size** (100 / 250 / 500 KB / 1 MB, plus a custom KB field) and let the app search for the best quality that fits. Quality-only: if the budget still can't be hit, use the dedicated [Resize & Compress](README.resize.md) **Fit to file size** op. |
 
 ## How the pipeline composes
 
@@ -84,7 +83,7 @@ presentation/
     EditorViewModel.kt   StateFlow<EditorUiState> + one-shot effects channel
     EditorUiState.kt     Immutable UI state (assembles the Pipeline) + EditorEffect
     EditorTool.kt        The set of editing tools
-    components/          ImageCropper, EditorControls (per-tool panels)
+    components/          ImageCropper, EditorControls, DigitField (per-tool panels)
 
 domain/
   model/                 ImageOp (sealed) + Pipeline, CropShape, PhotoFilter,

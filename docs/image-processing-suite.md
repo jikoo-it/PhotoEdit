@@ -161,3 +161,14 @@ All on branch `feature/image-processing-suite`.
 - Compress size estimates (needs a background render+encode).
 - Aspect-ratio lock / preset ratios in the crop overlay.
 - Persisting the pipeline as a reusable preset across sessions.
+
+## Later (on `main`, 2026-09-13)
+
+Not part of Phases 0–5, but now shipped:
+
+- **Exact pixel resize** (`ResizeMode.EXACT`) with an aspect-ratio lock, plus a
+  **custom KB** field next to target-size presets in Export.
+- Dedicated **[Resize & Compress](../README.resize.md)** home flow: bulk
+  dimensions, compress, or per-image **fit to file size**
+  (`FitImagesToSizeUseCase`).
+
