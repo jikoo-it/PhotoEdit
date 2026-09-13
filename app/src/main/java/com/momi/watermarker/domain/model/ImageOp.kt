@@ -1,5 +1,7 @@
 package com.momi.watermarker.domain.model
 
+import kotlin.math.roundToInt
+
 /**
  * A single, self-contained image transformation.
  *
@@ -64,29 +66,109 @@ sealed interface ImageOp {
     }
 
     /**
-     * Scales the image by a percentage (up or down) or caps its longest side.
+     * Scales the image by a percentage (up or down), caps its longest side, or
+     * stretches it to an exact width × height in pixels.
      * A [percent] above 1f enlarges the image; below 1f shrinks it.
+     * [lockAspectRatio] only affects how the UI fills in the other exact
+     * dimension; the renderer always uses [widthPx] × [heightPx] as given.
      */
     data class Resize(
         val mode: ResizeMode = ResizeMode.PERCENT,
         val percent: Float = 1f,
         val maxDimensionPx: Int = DEFAULT_MAX_DIMENSION,
+        val widthPx: Int = 0,
+        val heightPx: Int = 0,
+        val lockAspectRatio: Boolean = true,
     ) : ImageOp {
         init {
             require(percent in MIN_PERCENT..MAX_PERCENT) {
                 "percent must be within $MIN_PERCENT..$MAX_PERCENT, was $percent"
             }
             require(maxDimensionPx > 0) { "maxDimensionPx must be > 0, was $maxDimensionPx" }
+            require(widthPx >= 0) { "widthPx must be >= 0, was $widthPx" }
+            require(heightPx >= 0) { "heightPx must be >= 0, was $heightPx" }
         }
 
         /**
          * True only when this resize can never change any image: an exact 100%
-         * scale. A [ResizeMode.LONGEST_SIDE] resize is not identity here — whether
-         * it changes a given image depends on that image's size, decided by the
-         * processor at render time.
+         * scale, or Exact mode with no size typed yet. [ResizeMode.LONGEST_SIDE]
+         * is not identity here — whether it changes a given image depends on
+         * that image's size, decided by the processor at render time.
          */
         val isIdentity: Boolean
-            get() = mode == ResizeMode.PERCENT && percent == 1f
+            get() = when (mode) {
+                ResizeMode.PERCENT -> percent == 1f
+                ResizeMode.LONGEST_SIDE -> false
+                ResizeMode.EXACT -> widthPx <= 0 || heightPx <= 0
+            }
+
+        /** Output size for a source of [sourceWidth] × [sourceHeight]. */
+        fun targetDimensions(sourceWidth: Int, sourceHeight: Int): Pair<Int, Int> {
+            val w = sourceWidth.coerceAtLeast(1)
+            val h = sourceHeight.coerceAtLeast(1)
+            return when (mode) {
+                ResizeMode.PERCENT -> {
+                    if (percent == 1f) w to h
+                    else (w * percent).roundToInt().coerceAtLeast(1) to
+                        (h * percent).roundToInt().coerceAtLeast(1)
+                }
+                ResizeMode.LONGEST_SIDE -> {
+                    val longest = maxOf(w, h)
+                    if (longest <= maxDimensionPx) w to h
+                    else {
+                        val scale = maxDimensionPx.toFloat() / longest
+                        (w * scale).roundToInt().coerceAtLeast(1) to
+                            (h * scale).roundToInt().coerceAtLeast(1)
+                    }
+                }
+                ResizeMode.EXACT -> {
+                    if (widthPx <= 0 || heightPx <= 0) w to h
+                    else widthPx.coerceIn(MIN_EXACT_PX, MAX_EXACT_PX) to
+                        heightPx.coerceIn(MIN_EXACT_PX, MAX_EXACT_PX)
+                }
+            }
+        }
+
+        /** Sets [widthPx], and [heightPx] if [lockAspectRatio] is on. */
+        fun withExactWidth(width: Int): Resize {
+            val w = width.coerceIn(MIN_EXACT_PX, MAX_EXACT_PX)
+            val h = if (lockAspectRatio && widthPx > 0 && heightPx > 0) {
+                ((w.toLong() * heightPx) / widthPx).toInt().coerceIn(MIN_EXACT_PX, MAX_EXACT_PX)
+            } else {
+                heightPx
+            }
+            return copy(widthPx = w, heightPx = h)
+        }
+
+        /** Sets [heightPx], and [widthPx] if [lockAspectRatio] is on. */
+        fun withExactHeight(height: Int): Resize {
+            val h = height.coerceIn(MIN_EXACT_PX, MAX_EXACT_PX)
+            val w = if (lockAspectRatio && widthPx > 0 && heightPx > 0) {
+                ((h.toLong() * widthPx) / heightPx).toInt().coerceIn(MIN_EXACT_PX, MAX_EXACT_PX)
+            } else {
+                widthPx
+            }
+            return copy(widthPx = w, heightPx = h)
+        }
+
+        /**
+         * Shrinks this resize by [factor] (0–1), keeping the current mode so a
+         * batch still shares one setting. Factors ≥ 1 leave the op unchanged.
+         */
+        fun scaledBy(factor: Float): Resize {
+            val f = factor.coerceIn(MIN_PERCENT, 1f)
+            if (f >= 0.999f) return this
+            return when (mode) {
+                ResizeMode.PERCENT ->
+                    copy(percent = (percent * f).coerceIn(MIN_PERCENT, MAX_PERCENT))
+                ResizeMode.LONGEST_SIDE ->
+                    copy(maxDimensionPx = (maxDimensionPx * f).roundToInt().coerceAtLeast(1))
+                ResizeMode.EXACT -> copy(
+                    widthPx = (widthPx * f).roundToInt().coerceIn(MIN_EXACT_PX, MAX_EXACT_PX),
+                    heightPx = (heightPx * f).roundToInt().coerceIn(MIN_EXACT_PX, MAX_EXACT_PX),
+                )
+            }
+        }
 
         companion object {
             const val DEFAULT_MAX_DIMENSION = 2048
@@ -94,6 +176,9 @@ sealed interface ImageOp {
             /** Scale bounds: down to 5% and up to 400% of the original. */
             const val MIN_PERCENT = 0.05f
             const val MAX_PERCENT = 4f
+
+            const val MIN_EXACT_PX = 1
+            const val MAX_EXACT_PX = 8_192
         }
     }
 

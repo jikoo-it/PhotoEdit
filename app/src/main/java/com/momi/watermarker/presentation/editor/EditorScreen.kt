@@ -75,6 +75,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -112,6 +113,7 @@ import com.momi.watermarker.domain.model.WatermarkImage
 import com.momi.watermarker.domain.model.WatermarkPattern
 import com.momi.watermarker.domain.model.WatermarkType
 import com.momi.watermarker.presentation.editor.components.ColorSwatchRow
+import com.momi.watermarker.presentation.editor.components.DigitField
 import com.momi.watermarker.presentation.editor.components.ImageCropperScreen
 import com.momi.watermarker.presentation.editor.components.OptionChipRow
 import com.momi.watermarker.presentation.editor.components.PercentSlider
@@ -987,6 +989,55 @@ private fun ResizeControls(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            ResizeMode.EXACT -> {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    DigitField(
+                        value = resize.widthPx.toLong(),
+                        onValueChange = { viewModel.onResizeWidthChanged(it.toInt()) },
+                        label = stringResource(R.string.label_width_px),
+                        suffix = stringResource(R.string.suffix_px),
+                        maxDigits = 4,
+                        modifier = Modifier.weight(1f),
+                    )
+                    DigitField(
+                        value = resize.heightPx.toLong(),
+                        onValueChange = { viewModel.onResizeHeightChanged(it.toInt()) },
+                        label = stringResource(R.string.label_height_px),
+                        suffix = stringResource(R.string.suffix_px),
+                        maxDigits = 4,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            stringResource(R.string.keep_aspect_ratio),
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            stringResource(R.string.keep_aspect_ratio_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(
+                        checked = resize.lockAspectRatio,
+                        onCheckedChange = viewModel::onResizeLockAspectChanged,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.resize_exact_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         if (!resize.isIdentity) {
@@ -1114,6 +1165,14 @@ private fun ExportControls(
                             }
                         }
                     }
+                    DigitField(
+                        value = export.targetSizeBytes?.let { ExportOptions.kbFromBytes(it) } ?: 0L,
+                        onValueChange = viewModel::onCustomTargetSizeKbChanged,
+                        label = stringResource(R.string.label_custom_size_kb),
+                        suffix = stringResource(R.string.suffix_kb),
+                        maxDigits = 5,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Text(
                         text = stringResource(R.string.target_size_hint),
                         style = MaterialTheme.typography.bodySmall,

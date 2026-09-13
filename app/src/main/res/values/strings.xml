@@ -6,11 +6,27 @@
     <string name="home_prompt">What would you like to work on?</string>
     <string name="section_image_title">Bulk Image Processing</string>
     <string name="section_image_subtitle">Watermark, crop, filter, frame, and resize your photos</string>
+    <string name="section_resize_compress_title">Resize &amp; Compress</string>
+    <string name="section_resize_compress_subtitle">Bulk resize pixels, compress, or fit photos to a file size</string>
     <string name="section_single_image_title">Single Image Processing</string>
     <string name="section_single_image_subtitle">Portrait color, cut-out, and background removal for one photo</string>
     <string name="section_video_title">Video Processing</string>
     <string name="section_video_subtitle">Trim, cut &amp; join, merge, overlay, and more</string>
     <string name="navigate_back">‹ Back</string>
+
+    <!-- Resize & Compress (bulk) -->
+    <string name="batch_op_dimensions">Resize dimensions</string>
+    <string name="batch_op_dimensions_subtitle">Scale, cap the long edge, or set exact width × height</string>
+    <string name="batch_op_compress">Compress</string>
+    <string name="batch_op_compress_subtitle">Re-encode at a quality, or a target file size (quality only)</string>
+    <string name="batch_op_file_size">Fit to file size</string>
+    <string name="batch_op_file_size_subtitle">Resize and compress each photo independently to hit a KB target</string>
+    <string name="batch_images_picked">%1$d photos selected</string>
+    <string name="batch_process_and_save">Process &amp; save %1$d</string>
+    <string name="batch_progress">%1$d of %2$d</string>
+    <string name="batch_dimensions_hint">The same pixel setting is applied to every photo. Scale and Max size keep each photo\'s aspect ratio; Exact can stretch if the lock is off.</string>
+    <string name="batch_compress_hint">Pixels stay the same. Quality-only compression is applied to every photo. If a target size still can\'t be reached, use Fit to file size instead.</string>
+    <string name="batch_file_size_hint">Each photo is shrunk (aspect kept) only as much as needed, then compressed to fit the target. A 12 MP shot and a small snapshot can share the same 200 KB budget.</string>
 
     <!-- Single image hub -->
     <string name="tool_portrait_title">Portrait Color</string>
@@ -94,6 +110,12 @@
     <string name="resize_percent_hint">Below 100% shrinks the image; above 100% enlarges it (e.g. 200% turns 512×512 into 1024×1024).</string>
     <string name="label_longest_side">Longest side</string>
     <string name="resize_max_hint">Images larger than %1$dpx on their longest side are scaled down; smaller ones are left as-is.</string>
+    <string name="label_width_px">Width</string>
+    <string name="label_height_px">Height</string>
+    <string name="suffix_px">px</string>
+    <string name="keep_aspect_ratio">Keep aspect ratio</string>
+    <string name="keep_aspect_ratio_desc">Turn off to stretch to any width and height.</string>
+    <string name="resize_exact_hint">Every image in the batch is scaled to these pixels.</string>
     <string name="action_reset_to_full_size">Reset to full size</string>
     <string name="label_aspect_ratio">Aspect ratio</string>
     <string name="aspect_pad_hint">Adds bars (letterboxing) to reach the chosen ratio — nothing is cropped. \"Original\" keeps the image\'s own ratio.</string>
@@ -106,7 +128,9 @@
     <string name="label_quality_value">Quality: %1$d</string>
     <string name="quality_hint">Lower quality means smaller files.</string>
     <string name="label_target_size">Target size</string>
-    <string name="target_size_hint">Quality is chosen automatically to fit within the target size.</string>
+    <string name="label_custom_size_kb">Custom</string>
+    <string name="suffix_kb">KB</string>
+    <string name="target_size_hint">Quality is chosen automatically to fit within the target size. Type a custom size in KB (for example 200) if none of the presets fit.</string>
     <string name="format_lossless">%1$s is lossless; quality doesn\'t apply.</string>
     <string name="estimated_export_size">Estimated size of the shown image: %1$s</string>
     <string name="label_filter">Filter</string>
@@ -213,6 +237,7 @@
     <string name="frame_style_shadow">Shadow</string>
     <string name="resize_mode_percent">Scale</string>
     <string name="resize_mode_longest_side">Max size</string>
+    <string name="resize_mode_exact">Exact</string>
     <string name="aspect_original">Original</string>
     <string name="aspect_1_1">1:1</string>
     <string name="aspect_4_3">4:3</string>

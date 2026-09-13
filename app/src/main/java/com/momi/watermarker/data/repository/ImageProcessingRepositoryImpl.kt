@@ -5,6 +5,7 @@ import android.net.Uri
 import com.momi.watermarker.data.rendering.PipelineRenderer
 import com.momi.watermarker.data.storage.ImageStorage
 import com.momi.watermarker.di.DefaultDispatcher
+import com.momi.watermarker.domain.model.ExportFormat
 import com.momi.watermarker.domain.model.ExportOptions
 import com.momi.watermarker.domain.model.ImageInfo
 import com.momi.watermarker.domain.model.ImageOp
@@ -65,6 +66,22 @@ class ImageProcessingRepositoryImpl @Inject constructor(
             val bitmap = imageStorage.decodeBitmap(Uri.parse(source.uri))
             try {
                 imageStorage.measureEncodedSize(bitmap, export)
+            } finally {
+                bitmap.recycle()
+            }
+        }
+    }
+
+    override suspend fun fitToTargetSize(
+        source: WatermarkImage,
+        targetBytes: Long,
+        format: ExportFormat,
+    ): Outcome<WatermarkImage> = withContext(dispatcher) {
+        Outcome.catching {
+            val bitmap = imageStorage.decodeBitmap(Uri.parse(source.uri))
+            try {
+                val outputUri = imageStorage.writeFittedToCache(bitmap, targetBytes, format)
+                WatermarkImage(outputUri.toString())
             } finally {
                 bitmap.recycle()
             }

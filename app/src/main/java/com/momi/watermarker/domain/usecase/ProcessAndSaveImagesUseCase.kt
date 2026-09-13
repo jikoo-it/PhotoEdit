@@ -27,11 +27,12 @@ class ProcessAndSaveImagesUseCase @Inject constructor(
         sources: List<WatermarkImage>,
         pipeline: Pipeline,
         export: ExportOptions,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> },
     ): BatchSaveResult {
         val errors = mutableListOf<Throwable>()
         var savedCount = 0
 
-        for (source in sources) {
+        for ((index, source) in sources.withIndex()) {
             when (val rendered = processing.applyPipeline(source, pipeline, export)) {
                 is Outcome.Success -> when (val saved = saveImage(rendered.data, export.format)) {
                     is Outcome.Success -> savedCount++
@@ -39,6 +40,7 @@ class ProcessAndSaveImagesUseCase @Inject constructor(
                 }
                 is Outcome.Failure -> errors.add(rendered.error)
             }
+            onProgress(index + 1, sources.size)
         }
 
         return BatchSaveResult(savedCount = savedCount, requested = sources.size, errors = errors)

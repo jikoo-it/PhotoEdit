@@ -52,5 +52,15 @@ data class ExportOptions(
 
         /** Target-size presets (in bytes) offered to the user. */
         val TARGET_SIZE_PRESETS = listOf(100_000L, 250_000L, 500_000L, 1_000_000L)
+
+        const val MIN_TARGET_SIZE_BYTES = 1_000L
+        const val MAX_TARGET_SIZE_BYTES = 50_000_000L
+
+        /** Converts a whole-KB value typed by the user into a byte budget. */
+        fun bytesFromKb(kb: Long): Long =
+            (kb * 1_000L).coerceIn(MIN_TARGET_SIZE_BYTES, MAX_TARGET_SIZE_BYTES)
+
+        /** Whole KB shown in the custom-size field for a byte budget. */
+        fun kbFromBytes(bytes: Long): Long = (bytes / 1_000L).coerceAtLeast(1L)
     }
 }

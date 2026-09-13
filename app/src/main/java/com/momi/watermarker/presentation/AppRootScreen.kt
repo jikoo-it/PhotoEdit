@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.momi.watermarker.R
+import com.momi.watermarker.presentation.batch.BatchResizeScreen
 import com.momi.watermarker.presentation.editor.EditorScreen
 import com.momi.watermarker.presentation.settings.SettingsScreen
 import com.momi.watermarker.presentation.single.SingleImageScreen
@@ -38,6 +39,7 @@ import com.momi.watermarker.presentation.video.VideoEditorScreen
 /** The top-level flows the app offers. */
 enum class AppSection(@StringRes val titleRes: Int, @StringRes val subtitleRes: Int) {
     IMAGE(R.string.section_image_title, R.string.section_image_subtitle),
+    RESIZE_COMPRESS(R.string.section_resize_compress_title, R.string.section_resize_compress_subtitle),
     SINGLE_IMAGE(R.string.section_single_image_title, R.string.section_single_image_subtitle),
     VIDEO(R.string.section_video_title, R.string.section_video_subtitle),
 }
@@ -68,6 +70,11 @@ fun AppRootScreen(modifier: Modifier = Modifier) {
             BackHandler { section = null }
             EditorScreen(modifier = modifier)
         }
+
+        section == AppSection.RESIZE_COMPRESS -> BatchResizeScreen(
+            modifier = modifier,
+            onExit = { section = null },
+        )
 
         section == AppSection.SINGLE_IMAGE -> {
             SingleImageScreen(modifier = modifier, onExit = { section = null })

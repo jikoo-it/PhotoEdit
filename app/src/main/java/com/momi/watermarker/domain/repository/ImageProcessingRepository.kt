@@ -1,5 +1,6 @@
 package com.momi.watermarker.domain.repository
 
+import com.momi.watermarker.domain.model.ExportFormat
 import com.momi.watermarker.domain.model.ExportOptions
 import com.momi.watermarker.domain.model.ImageInfo
 import com.momi.watermarker.domain.model.Pipeline
@@ -37,4 +38,14 @@ interface ImageProcessingRepository {
      * [export] (used to preview the effect of quality / target-size settings).
      */
     suspend fun estimateExportSize(source: WatermarkImage, export: ExportOptions): Outcome<Long>
+
+    /**
+     * Shrinks [source] (aspect kept) if quality-only compression cannot hit
+     * [targetBytes], then encodes it to fit that budget.
+     */
+    suspend fun fitToTargetSize(
+        source: WatermarkImage,
+        targetBytes: Long,
+        format: ExportFormat,
+    ): Outcome<WatermarkImage>
 }

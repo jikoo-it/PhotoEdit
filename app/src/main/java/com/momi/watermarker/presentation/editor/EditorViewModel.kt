@@ -232,7 +232,15 @@ class EditorViewModel @Inject constructor(
 
     // --- Resize events ---
 
-    fun onResizeModeSelected(mode: ResizeMode) = updateResize(tag = null) { it.copy(mode = mode) }
+    fun onResizeModeSelected(mode: ResizeMode) = updateResize(tag = null) { current ->
+        if (mode != ResizeMode.EXACT) return@updateResize current.copy(mode = mode)
+        val info = _uiState.value.selectedImageInfo
+        current.copy(
+            mode = mode,
+            widthPx = current.widthPx.takeIf { it > 0 } ?: info?.width ?: 0,
+            heightPx = current.heightPx.takeIf { it > 0 } ?: info?.height ?: 0,
+        )
+    }
 
     fun onResizePercentChanged(percent: Float) =
         updateResize("resize.percent") {
@@ -241,6 +249,15 @@ class EditorViewModel @Inject constructor(
 
     fun onResizeMaxDimensionChanged(maxDimensionPx: Int) =
         updateResize(tag = null) { it.copy(maxDimensionPx = maxDimensionPx.coerceAtLeast(1)) }
+
+    fun onResizeWidthChanged(widthPx: Int) =
+        updateResize("resize.exact.width") { it.withExactWidth(widthPx) }
+
+    fun onResizeHeightChanged(heightPx: Int) =
+        updateResize("resize.exact.height") { it.withExactHeight(heightPx) }
+
+    fun onResizeLockAspectChanged(lock: Boolean) =
+        updateResize(tag = null) { it.copy(lockAspectRatio = lock) }
 
     /** Clears any scaling (back to full size). */
     fun onResetResize() = updateResize(tag = null) { ImageOp.Resize() }
@@ -348,6 +365,9 @@ class EditorViewModel @Inject constructor(
 
     fun onTargetSizeSelected(bytes: Long) =
         updateExport(tag = null) { it.copy(targetSizeBytes = bytes) }
+
+    fun onCustomTargetSizeKbChanged(kb: Long) =
+        updateExport("export.targetKb") { it.copy(targetSizeBytes = ExportOptions.bytesFromKb(kb)) }
 
     // --- Watermark configuration events ---
 

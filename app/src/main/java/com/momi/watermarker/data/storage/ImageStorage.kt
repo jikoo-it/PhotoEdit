@@ -11,11 +11,15 @@ import android.os.Environment
 import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.momi.watermarker.data.rendering.maskToShape
+import com.momi.watermarker.domain.model.CompressionMode
 import com.momi.watermarker.domain.model.CropShape
 import com.momi.watermarker.domain.model.ExportFormat
 import com.momi.watermarker.domain.model.ExportOptions
+import com.momi.watermarker.domain.model.ExportSizeAnalysis
 import com.momi.watermarker.domain.model.ImageInfo
 import com.momi.watermarker.domain.model.NormalizedRect
+import com.momi.watermarker.domain.model.SizeFitPlanner
+import com.momi.watermarker.domain.model.SizeFitSuggestion
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileOutputStream
@@ -175,6 +179,53 @@ class ImageStorage @Inject constructor(
         encodeToBytes(bitmap, export).size.toLong()
 
     /**
+     * Current encoded size plus, in target-size mode, a resize+compress
+     * suggestion that keeps aspect ratio and a decent JPEG/WebP quality.
+     */
+    fun analyzeExport(bitmap: Bitmap, export: ExportOptions): ExportSizeAnalysis {
+        if (!export.usesTargetSize) {
+            return ExportSizeAnalysis(estimatedBytes = measureEncodedSize(bitmap, export))
+        }
+        val target = export.targetSizeBytes ?: return ExportSizeAnalysis(
+            estimatedBytes = measureEncodedSize(bitmap, export),
+        )
+        return suggestSizeFit(bitmap, target, export.format)
+    }
+
+    /**
+     * Shrinks [bitmap] (aspect kept) if needed, then encodes it to fit
+     * [targetBytes] and writes the result to cache.
+     */
+    fun writeFittedToCache(
+        bitmap: Bitmap,
+        targetBytes: Long,
+        format: ExportFormat,
+    ): Uri {
+        val analysis = suggestSizeFit(bitmap, targetBytes, format)
+        val suggestion = analysis.suggestion
+        val scaled = if (suggestion != null && suggestion.needsResize) {
+            Bitmap.createScaledBitmap(
+                bitmap,
+                suggestion.widthPx,
+                suggestion.heightPx,
+                /* filter = */ true,
+            )
+        } else {
+            null
+        }
+        try {
+            val export = ExportOptions(
+                format = format,
+                mode = CompressionMode.TARGET_SIZE,
+                targetSizeBytes = targetBytes,
+            )
+            return writeToCache(scaled ?: bitmap, prefix = "fitted", export = export)
+        } finally {
+            if (scaled != null && scaled !== bitmap) scaled.recycle()
+        }
+    }
+
+    /**
      * Encodes [bitmap] to a byte array per [export]. For a fixed quality this is
      * a single compress; for a size target it binary-searches quality for the
      * largest that fits the budget (falling back to the lowest quality if none
@@ -187,21 +238,123 @@ class ImageStorage @Inject constructor(
         }
 
         val target = export.targetSizeBytes ?: return compress(bitmap, format, export.effectiveQuality)
+        return searchQuality(bitmap, format, target).first
+    }
+
+    /**
+     * Picks the largest quality whose encoded size is ≤ [targetBytes]. Returns
+     * the encoded bytes and the quality used (or [MIN_TARGET_QUALITY] if none fit).
+     */
+    private fun searchQuality(
+        bitmap: Bitmap,
+        format: Bitmap.CompressFormat,
+        targetBytes: Long,
+    ): Pair<ByteArray, Int> {
         var low = MIN_TARGET_QUALITY
         var high = 100
         var best: ByteArray? = null
+        var bestQuality = MIN_TARGET_QUALITY
         while (low <= high) {
             val mid = (low + high) / 2
             val encoded = compress(bitmap, format, mid)
-            if (encoded.size <= target) {
+            if (encoded.size <= targetBytes) {
                 best = encoded
+                bestQuality = mid
                 low = mid + 1
             } else {
                 high = mid - 1
             }
         }
-        // If even the lowest quality overshoots, keep that smallest result.
-        return best ?: compress(bitmap, format, MIN_TARGET_QUALITY)
+        val bytes = best ?: compress(bitmap, format, MIN_TARGET_QUALITY)
+        val quality = if (best != null) bestQuality else MIN_TARGET_QUALITY
+        return bytes to quality
+    }
+
+    /**
+     * Combines a quality search at the current size with a scale search (aspect
+     * kept) at [SizeFitPlanner.PREFERRED_QUALITY] when shrinking is needed.
+     */
+    private fun suggestSizeFit(
+        bitmap: Bitmap,
+        targetBytes: Long,
+        exportFormat: ExportFormat,
+    ): ExportSizeAnalysis {
+        val format = exportFormat.toCompressFormat()
+        val (currentEncoded, qualityUsed) = searchQuality(bitmap, format, targetBytes)
+        val currentBytes = currentEncoded.size.toLong()
+        val fits = currentBytes <= targetBytes
+        val needsResize = SizeFitPlanner.needsResize(fits, qualityUsed, exportFormat.supportsQuality)
+        if (!needsResize) {
+            return ExportSizeAnalysis(
+                estimatedBytes = currentBytes,
+                suggestion = SizeFitSuggestion(
+                    widthPx = bitmap.width,
+                    heightPx = bitmap.height,
+                    scalePercent = 1f,
+                    estimatedBytes = currentBytes,
+                    needsResize = false,
+                    canMeetTarget = true,
+                ),
+            )
+        }
+
+        var low = SizeFitPlanner.MIN_SCALE
+        var high = 1f
+        var bestScale = SizeFitPlanner.MIN_SCALE
+        var bestBytes = Long.MAX_VALUE
+        var canMeet = false
+        repeat(SCALE_SEARCH_STEPS) {
+            val mid = (low + high) / 2f
+            val (w, h) = SizeFitPlanner.scaledDimensions(bitmap.width, bitmap.height, mid)
+            val scaled = Bitmap.createScaledBitmap(bitmap, w, h, /* filter = */ true)
+            try {
+                val encoded = compress(scaled, format, SizeFitPlanner.PREFERRED_QUALITY)
+                val size = encoded.size.toLong()
+                if (size <= targetBytes) {
+                    canMeet = true
+                    bestScale = mid
+                    bestBytes = size
+                    low = mid
+                } else {
+                    high = mid
+                    if (size < bestBytes) {
+                        bestScale = mid
+                        bestBytes = size
+                    }
+                }
+            } finally {
+                if (scaled !== bitmap) scaled.recycle()
+            }
+        }
+
+        val (widthPx, heightPx) = SizeFitPlanner.scaledDimensions(
+            bitmap.width,
+            bitmap.height,
+            bestScale,
+        )
+        // Recheck the smallest scale at minimum quality if preferred quality missed.
+        if (!canMeet) {
+            val scaled = Bitmap.createScaledBitmap(bitmap, widthPx, heightPx, /* filter = */ true)
+            try {
+                val minEncoded = compress(scaled, format, MIN_TARGET_QUALITY)
+                bestBytes = minEncoded.size.toLong()
+                canMeet = bestBytes <= targetBytes
+            } finally {
+                if (scaled !== bitmap) scaled.recycle()
+            }
+        }
+
+        return ExportSizeAnalysis(
+            estimatedBytes = currentBytes,
+            suggestion = SizeFitSuggestion(
+                widthPx = widthPx,
+                heightPx = heightPx,
+                scalePercent = bestScale,
+                estimatedBytes = bestBytes,
+                needsResize = true,
+                canMeetTarget = canMeet,
+            ),
+        )
     }
 
     private fun compress(bitmap: Bitmap, format: Bitmap.CompressFormat, quality: Int): ByteArray =
@@ -311,5 +464,6 @@ class ImageStorage @Inject constructor(
         const val SHARED_DIR = "shared_images"
         const val JPEG_QUALITY = 95
         const val MIN_TARGET_QUALITY = 5
+        const val SCALE_SEARCH_STEPS = 8
     }
 }

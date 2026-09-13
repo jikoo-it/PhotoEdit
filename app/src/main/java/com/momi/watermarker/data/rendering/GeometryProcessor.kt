@@ -4,14 +4,13 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Matrix
 import com.momi.watermarker.domain.model.ImageOp
-import com.momi.watermarker.domain.model.ResizeMode
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
 
 /**
- * Applies geometric [ImageOp]s — right-angle rotation, mirroring and downscaling
- * — to a bitmap.
+ * Applies geometric [ImageOp]s — right-angle rotation, mirroring, scaling and
+ * aspect padding — to a bitmap.
  *
  * Every method either returns a new bitmap or the input unchanged (when the op
  * is a no-op for that image); it never recycles the input. The caller
@@ -57,7 +56,7 @@ class GeometryProcessor @Inject constructor() {
 
     /** Scales [src] per [op] (up or down). Returns [src] when no scaling is needed. */
     fun resize(src: Bitmap, op: ImageOp.Resize): Bitmap {
-        val (targetWidth, targetHeight) = targetSize(src.width, src.height, op) ?: return src
+        val (targetWidth, targetHeight) = op.targetDimensions(src.width, src.height)
         if (targetWidth == src.width && targetHeight == src.height) return src
         return Bitmap.createScaledBitmap(src, targetWidth, targetHeight, /* filter = */ true)
     }
@@ -86,22 +85,4 @@ class GeometryProcessor @Inject constructor() {
         canvas.drawBitmap(src, (canvasW - w) / 2f, (canvasH - h) / 2f, null)
         return output
     }
-
-    /** The target dimensions for [op], or null if the image should be left as-is. */
-    private fun targetSize(width: Int, height: Int, op: ImageOp.Resize): Pair<Int, Int>? =
-        when (op.mode) {
-            ResizeMode.PERCENT -> {
-                if (op.percent == 1f) null
-                else scaled(width, height, op.percent)
-            }
-            ResizeMode.LONGEST_SIDE -> {
-                val longest = maxOf(width, height)
-                if (longest <= op.maxDimensionPx) null
-                else scaled(width, height, op.maxDimensionPx.toFloat() / longest)
-            }
-        }
-
-    private fun scaled(width: Int, height: Int, scale: Float): Pair<Int, Int> =
-        (width * scale).roundToInt().coerceAtLeast(1) to
-            (height * scale).roundToInt().coerceAtLeast(1)
 }
