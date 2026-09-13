@@ -30,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
@@ -45,11 +46,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -64,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.momi.watermarker.domain.model.OverlayPosition
 import com.momi.watermarker.domain.model.SlideTransition
+import com.momi.watermarker.domain.model.TrimRange
 import com.momi.watermarker.domain.model.VideoColorFilter
 import com.momi.watermarker.presentation.editor.components.DigitField
 import com.momi.watermarker.presentation.editor.components.ImageCropperScreen
@@ -421,12 +424,19 @@ private fun SourcePlayerSection(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CutJoinControls(
     uiState: VideoEditorUiState,
     viewModel: VideoEditorViewModel,
     enabled: Boolean = true,
 ) {
+    var editingIndex by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(editingIndex, uiState.keepRanges.size) {
+        val index = editingIndex ?: return@LaunchedEffect
+        if (index !in uiState.keepRanges.indices) editingIndex = null
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -466,15 +476,29 @@ private fun CutJoinControls(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            stringResource(R.string.trim_time_ms_hint),
+            stringResource(R.string.tap_segment_to_edit),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         uiState.keepRanges.forEachIndexed { index, range ->
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            val sliderMax = uiState.durationMs.toFloat().coerceAtLeast(1f)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        enabled = enabled,
+                        onClickLabel = stringResource(R.string.cd_edit_segment, index + 1),
+                    ) { editingIndex = index },
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(R.string.segment_range, index + 1, formatMs(range.startMs), formatMs(range.endMs)),
+                        stringResource(
+                            R.string.segment_range,
+                            index + 1,
+                            formatMs(range.startMs),
+                            formatMs(range.endMs),
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.weight(1f),
                     )
@@ -487,49 +511,21 @@ private fun CutJoinControls(
                         }
                     }
                 }
-                RangeSlider(
-                    value = range.startMs.toFloat()..range.endMs.toFloat(),
-                    onValueChange = { r ->
-                        viewModel.onKeepRangeChanged(index, r.start.toLong(), r.endInclusive.toLong())
-                    },
-                    valueRange = 0f..uiState.durationMs.toFloat(),
-                    enabled = enabled,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    DigitField(
-                        value = range.startMs,
-                        onValueChange = { viewModel.onKeepRangeChanged(index, it, range.endMs) },
-                        label = stringResource(R.string.trim_start),
-                        suffix = stringResource(R.string.unit_ms),
-                        allowZero = true,
-                        maxDigits = 8,
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f),
+                Box {
+                    RangeSlider(
+                        value = range.startMs.toFloat()..
+                            range.endMs.toFloat().coerceAtLeast(range.startMs.toFloat()),
+                        onValueChange = {},
+                        valueRange = 0f..sliderMax,
+                        enabled = false,
                     )
-                    DigitField(
-                        value = range.endMs,
-                        onValueChange = { viewModel.onKeepRangeChanged(index, range.startMs, it) },
-                        label = stringResource(R.string.trim_end),
-                        suffix = stringResource(R.string.unit_ms),
-                        allowZero = true,
-                        maxDigits = 8,
-                        enabled = enabled,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                if (!uiState.excludeSections) {
-                    Text(
-                        stringResource(R.string.speed_value, range.speed),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    Slider(
-                        value = range.speed,
-                        onValueChange = { viewModel.onKeepRangeSpeedChanged(index, it) },
-                        valueRange = 0.25f..4f,
-                        enabled = enabled,
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clickable(
+                                enabled = enabled,
+                                onClick = { editingIndex = index },
+                            ),
                     )
                 }
                 HorizontalDivider()
@@ -546,6 +542,115 @@ private fun CutJoinControls(
             onClick = viewModel::onAddKeepRange,
             enabled = enabled,
         ) { Text(stringResource(R.string.add_segment)) }
+    }
+
+    val editing = editingIndex?.let { index ->
+        uiState.keepRanges.getOrNull(index)?.let { index to it }
+    }
+    if (editing != null) {
+        val (index, range) = editing
+        SegmentRangeSheet(
+            index = index,
+            range = range,
+            durationMs = uiState.durationMs,
+            showSpeed = !uiState.excludeSections,
+            enabled = enabled,
+            onRangeChanged = { start, end -> viewModel.onKeepRangeChanged(index, start, end) },
+            onSpeedChanged = { viewModel.onKeepRangeSpeedChanged(index, it) },
+            onDismiss = { editingIndex = null },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SegmentRangeSheet(
+    index: Int,
+    range: TrimRange,
+    durationMs: Long,
+    showSpeed: Boolean,
+    enabled: Boolean,
+    onRangeChanged: (Long, Long) -> Unit,
+    onSpeedChanged: (Float) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sliderMax = durationMs.toFloat().coerceAtLeast(0f)
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                stringResource(R.string.edit_segment, index + 1),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                stringResource(R.string.trim_clip_duration, formatMs(durationMs), durationMs),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                stringResource(R.string.trim_time_ms_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            key(index) {
+                RangeSlider(
+                    value = range.startMs.toFloat()..range.endMs.toFloat().coerceAtLeast(range.startMs.toFloat()),
+                    onValueChange = { r ->
+                        onRangeChanged(r.start.toLong(), r.endInclusive.toLong())
+                    },
+                    valueRange = 0f..sliderMax.coerceAtLeast(1f),
+                    enabled = enabled && durationMs > 0L,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    DigitField(
+                        value = range.startMs,
+                        onValueChange = { onRangeChanged(it, range.endMs) },
+                        label = stringResource(R.string.trim_start),
+                        suffix = stringResource(R.string.unit_ms),
+                        allowZero = true,
+                        maxDigits = 8,
+                        enabled = enabled,
+                        modifier = Modifier.weight(1f),
+                    )
+                    DigitField(
+                        value = range.endMs,
+                        onValueChange = { onRangeChanged(range.startMs, it) },
+                        label = stringResource(R.string.trim_end),
+                        suffix = stringResource(R.string.unit_ms),
+                        allowZero = true,
+                        maxDigits = 8,
+                        enabled = enabled,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+            if (showSpeed) {
+                Text(
+                    stringResource(R.string.speed_value, range.speed),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = range.speed,
+                    onValueChange = onSpeedChanged,
+                    valueRange = 0.25f..4f,
+                    enabled = enabled,
+                )
+            }
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.align(Alignment.End),
+            ) {
+                Text(stringResource(R.string.action_done))
+            }
+        }
     }
 }
 

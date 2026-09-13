@@ -1,5 +1,9 @@
 package com.momi.watermarker.presentation.video
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import android.view.View
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -15,6 +19,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +37,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -43,7 +51,8 @@ import kotlinx.coroutines.isActive
  * A Media3 [ExoPlayer] preview of [uri], embedded via [AndroidView]. Shows
  * [placeholder] text when no clip is loaded. The player is released when the
  * composable leaves the composition. The stock settings (playback-speed) icon
- * is hidden; a fullscreen control on the player expands the preview.
+ * is hidden; a fullscreen control on the player expands the preview and locks
+ * the screen to landscape or portrait from the clip's aspect ratio.
  */
 @Composable
 fun VideoPreview(
@@ -56,14 +65,57 @@ fun VideoPreview(
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
     var positionMs by remember { mutableLongStateOf(0L) }
     var durationMs by remember { mutableLongStateOf(0L) }
-    var isFullscreen by remember { mutableStateOf(false) }
+    var videoWidth by remember { mutableIntStateOf(0) }
+    var videoHeight by remember { mutableIntStateOf(0) }
+    var pixelRatio by remember { mutableFloatStateOf(1f) }
+    val fullscreenState = remember { mutableStateOf(false) }
+    var isFullscreen by fullscreenState
+    val onFullscreenChange = remember(fullscreenState) {
+        { entering: Boolean -> fullscreenState.value = entering }
+    }
 
     DisposableEffect(Unit) {
         onDispose { exoPlayer.release() }
     }
 
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                videoWidth = videoSize.width
+                videoHeight = videoSize.height
+                pixelRatio = videoSize.pixelWidthHeightRatio
+            }
+        }
+        exoPlayer.addListener(listener)
+        val current = exoPlayer.videoSize
+        videoWidth = current.width
+        videoHeight = current.height
+        pixelRatio = current.pixelWidthHeightRatio
+        onDispose { exoPlayer.removeListener(listener) }
+    }
+
+    DisposableEffect(isFullscreen) {
+        val activity = context.findActivity()
+        if (!isFullscreen || activity == null) {
+            return@DisposableEffect onDispose { }
+        }
+        val previous = activity.requestedOrientation
+        onDispose { activity.requestedOrientation = previous }
+    }
+
+    LaunchedEffect(isFullscreen, videoWidth, videoHeight, pixelRatio) {
+        if (!isFullscreen) return@LaunchedEffect
+        val activity = context.findActivity() ?: return@LaunchedEffect
+        activity.requestedOrientation = fullscreenOrientation(videoWidth, videoHeight, pixelRatio)
+    }
+
     LaunchedEffect(uri) {
-        if (uri == null) isFullscreen = false
+        if (uri == null) {
+            isFullscreen = false
+            videoWidth = 0
+            videoHeight = 0
+            pixelRatio = 1f
+        }
         if (uri != null) {
             exoPlayer.setMediaItem(MediaItem.fromUri(uri))
             exoPlayer.prepare()
@@ -97,7 +149,7 @@ fun VideoPreview(
                 PlayerSurface(
                     exoPlayer = exoPlayer,
                     isFullscreen = false,
-                    onFullscreenChange = { isFullscreen = it },
+                    onFullscreenChange = onFullscreenChange,
                     modifier = Modifier.fillMaxSize(),
                 )
                 TimecodeBadge(
@@ -137,7 +189,7 @@ fun VideoPreview(
                 PlayerSurface(
                     exoPlayer = exoPlayer,
                     isFullscreen = true,
-                    onFullscreenChange = { isFullscreen = it },
+                    onFullscreenChange = onFullscreenChange,
                     modifier = Modifier.fillMaxSize(),
                 )
                 TimecodeBadge(
@@ -201,9 +253,47 @@ private fun PlayerView.applyPreviewChrome(
 ) {
     findViewById<View>(androidx.media3.ui.R.id.exo_position)?.visibility = View.GONE
     findViewById<View>(androidx.media3.ui.R.id.exo_duration)?.visibility = View.GONE
-    findViewById<View>(androidx.media3.ui.R.id.exo_settings)?.visibility = View.GONE
+    hideSettingsButton()
     setFullscreenButtonClickListener { onFullscreenChange(it) }
     setFullscreenButtonState(isFullscreen)
+}
+
+private fun PlayerView.hideSettingsButton() {
+    val settings = findViewById<View>(androidx.media3.ui.R.id.exo_settings) ?: return
+    settings.visibility = View.GONE
+    if (settings.getTag(androidx.media3.ui.R.id.exo_settings) == true) return
+    settings.setTag(androidx.media3.ui.R.id.exo_settings, true)
+    settings.addOnLayoutChangeListener { view, _, _, _, _, _, _, _, _ ->
+        if (view.visibility != View.GONE) view.visibility = View.GONE
+    }
+}
+
+/**
+ * Screen orientation for fullscreen playback: landscape when the frame is
+ * wider than it is tall, portrait when it is taller, otherwise unspecified.
+ */
+internal fun fullscreenOrientation(
+    width: Int,
+    height: Int,
+    pixelWidthHeightRatio: Float = 1f,
+): Int {
+    if (width <= 0 || height <= 0) return ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    val displayWidth = width * pixelWidthHeightRatio
+    val displayHeight = height.toFloat()
+    return when {
+        displayWidth > displayHeight -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        displayWidth < displayHeight -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+}
+
+private fun Context.findActivity(): Activity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
 }
 
 /** Formats a millisecond offset as `m:ss.SSS` (or `h:mm:ss.SSS`). */

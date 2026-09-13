@@ -341,6 +341,9 @@
     <string name="segments_to_exclude">Segments to exclude (cut out):</string>
     <string name="exclude_covers_all">Those ranges cover the whole video. Shrink them so something remains.</string>
     <string name="segment_range">#%1$d: %2$s – %3$s</string>
+    <string name="edit_segment">Segment %1$d</string>
+    <string name="cd_edit_segment">Edit segment %1$d</string>
+    <string name="tap_segment_to_edit">Tap a segment to set its range.</string>
     <string name="trim_time_ms_hint">Type start and end in milliseconds, or drag the slider.</string>
     <string name="trim_clip_duration">Clip: %1$s (%2$d ms)</string>
     <string name="trim_start">Start</string>
@@ -399,12 +402,16 @@
     <string name="studio_title">Studio</string>
     <string name="studio_empty_hint">Pick a photo to start a layer stack.</string>
     <string name="studio_layers">Layers</string>
+    <string name="studio_layers_hint">Painted bottom to top. The list shows the front layer first. Hide with the eye; Background cannot be deleted.</string>
     <string name="studio_tools">Tools</string>
     <string name="studio_cut_out">Cut out</string>
     <string name="studio_cut_out_auto">Auto cut-out</string>
     <string name="studio_cut_out_trace">Trace outline</string>
-    <string name="studio_trace_hint">Drag around the area you want to keep, then lift your finger.</string>
-    <string name="studio_cutout_review_hint">Drag the outline to adjust, then confirm.</string>
+    <string name="studio_trace_hint">Full screen, pinch to zoom, then drag one finger around the area you want to keep. Two fingers pan.</string>
+    <string name="studio_cutout_review_hint">Pinch to zoom, then drag handles or the shape. Confirm when it looks right.</string>
+    <string name="studio_trace_fullscreen">Full screen</string>
+    <string name="cd_studio_trace_fullscreen">Trace in full screen</string>
+    <string name="cd_studio_exit_fullscreen">Exit full screen</string>
     <string name="studio_cutout_confirm">Use this cut-out</string>
     <string name="studio_trace_too_small">Trace a larger outline around the area.</string>
     <string name="error_cutout_path">Couldn\'t cut out that selection: %1$s</string>
@@ -415,6 +422,7 @@
     <string name="studio_backdrop_original">Original</string>
     <string name="studio_layer_background">Background</string>
     <string name="studio_layer_subject">Subject</string>
+    <string name="studio_layer_subject_n">Subject %1$d</string>
     <string name="studio_layer_fill">Fill</string>
     <string name="studio_layer_replacement">Background image</string>
     <string name="studio_layer_adjustment">Portrait look</string>

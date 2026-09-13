@@ -17,9 +17,13 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.MomiWaterMarker">
 
+        <!-- Orientation is locked to the clip's aspect while the video player
+             is fullscreen; handle the config change in-place so the player
+             isn't recreated. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden"
             android:theme="@style/Theme.MomiWaterMarker">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

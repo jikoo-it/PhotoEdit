@@ -8,17 +8,24 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,7 +33,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
@@ -50,12 +59,16 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -69,11 +82,15 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -85,6 +102,7 @@ import com.momi.watermarker.domain.model.NormalizedPoint
 import com.momi.watermarker.domain.model.StudioBackdrop
 import com.momi.watermarker.domain.model.containsPoint
 import com.momi.watermarker.presentation.theme.extraColors
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.hypot
 import kotlin.math.roundToInt
 
@@ -98,8 +116,21 @@ fun StudioScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var cutoutFullscreen by remember { mutableStateOf(false) }
+    val liveOutline = remember { mutableStateListOf<NormalizedPoint>() }
 
-    BackHandler(enabled = uiState.inCutoutSession) { viewModel.onCancelCutout() }
+    LaunchedEffect(uiState.isTracing) {
+        if (uiState.isTracing) cutoutFullscreen = true
+        else liveOutline.clear()
+    }
+    LaunchedEffect(uiState.inCutoutSession) {
+        if (!uiState.inCutoutSession) cutoutFullscreen = false
+    }
+
+    BackHandler(enabled = cutoutFullscreen) { cutoutFullscreen = false }
+    BackHandler(enabled = uiState.inCutoutSession && !cutoutFullscreen) {
+        viewModel.onCancelCutout()
+    }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -170,7 +201,13 @@ fun StudioScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            PreviewBox(uiState, viewModel)
+            PreviewBox(
+                uiState = uiState,
+                viewModel = viewModel,
+                liveOutline = liveOutline,
+                interactive = !cutoutFullscreen,
+                onRequestFullscreen = { cutoutFullscreen = true },
+            )
 
             OutlinedButton(
                 onClick = {
@@ -218,15 +255,25 @@ fun StudioScreen(
             }
         }
     }
+
+    if (cutoutFullscreen && uiState.inCutoutSession) {
+        CutoutFullscreenDialog(
+            uiState = uiState,
+            viewModel = viewModel,
+            liveOutline = liveOutline,
+            onDismiss = { cutoutFullscreen = false },
+        )
+    }
 }
 
 @Composable
-private fun PreviewBox(uiState: StudioUiState, viewModel: StudioViewModel) {
-    val extras = MaterialTheme.extraColors
-    val outline = remember { mutableStateListOf<NormalizedPoint>() }
-    LaunchedEffect(uiState.isTracing) {
-        if (!uiState.isTracing) outline.clear()
-    }
+private fun PreviewBox(
+    uiState: StudioUiState,
+    viewModel: StudioViewModel,
+    liveOutline: MutableList<NormalizedPoint>,
+    interactive: Boolean,
+    onRequestFullscreen: () -> Unit,
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -235,34 +282,247 @@ private fun PreviewBox(uiState: StudioUiState, viewModel: StudioViewModel) {
             .checkerboard(),
         contentAlignment = Alignment.Center,
     ) {
-        val preview = uiState.displayUri
-        if (preview != null) {
-            AsyncImage(
-                model = preview,
-                contentDescription = stringResource(R.string.cd_preview),
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Text(
-                stringResource(R.string.studio_empty_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        ZoomableCutoutStage(
+            uiState = uiState,
+            viewModel = viewModel,
+            liveOutline = liveOutline,
+            zoomEnabled = interactive && uiState.inCutoutSession,
+            interactive = interactive,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (uiState.inCutoutSession) {
+            IconButton(
+                onClick = onRequestFullscreen,
+                modifier = Modifier.align(Alignment.TopEnd),
+            ) {
+                Icon(
+                    Icons.Filled.Fullscreen,
+                    contentDescription = stringResource(R.string.cd_studio_trace_fullscreen),
+                    tint = MaterialTheme.extraColors.overlayContent,
+                )
+            }
         }
-        if (uiState.isTracing) {
-            TraceOverlay(
-                imageAspect = uiState.imageAspect,
-                outline = outline,
-                onCompleted = viewModel::onTraceCompleted,
+    }
+}
+
+@Composable
+private fun CutoutFullscreenDialog(
+    uiState: StudioUiState,
+    viewModel: StudioViewModel,
+    liveOutline: MutableList<NormalizedPoint>,
+    onDismiss: () -> Unit,
+) {
+    val extras = MaterialTheme.extraColors
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(extras.immersiveBackground)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(
+                        if (uiState.isTracing) R.string.studio_cut_out_trace
+                        else R.string.studio_cut_out,
+                    ),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = extras.immersiveOnBackground,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.cd_studio_exit_fullscreen),
+                        tint = extras.immersiveOnBackground,
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .checkerboard(),
+            ) {
+                ZoomableCutoutStage(
+                    uiState = uiState,
+                    viewModel = viewModel,
+                    liveOutline = liveOutline,
+                    zoomEnabled = true,
+                    interactive = true,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            Text(
+                stringResource(
+                    if (uiState.isTracing) R.string.studio_trace_hint
+                    else R.string.studio_cutout_review_hint,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = extras.immersiveOnBackground.copy(alpha = 0.8f),
             )
-        } else if (uiState.isReviewingCutout) {
-            ReviewOverlay(
-                imageAspect = uiState.imageAspect,
-                outline = uiState.cutoutOutline,
-                onPointMoved = viewModel::onOutlinePointMoved,
-                onTranslated = viewModel::onOutlineTranslated,
-            )
+            if (uiState.isReviewingCutout) {
+                Button(
+                    onClick = viewModel::onConfirmCutout,
+                    enabled = !uiState.isBusy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.studio_cutout_confirm))
+                }
+            }
+            OutlinedButton(
+                onClick = viewModel::onCancelCutout,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.action_cancel))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ZoomableCutoutStage(
+    uiState: StudioUiState,
+    viewModel: StudioViewModel,
+    liveOutline: MutableList<NormalizedPoint>,
+    zoomEnabled: Boolean,
+    interactive: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val extras = MaterialTheme.extraColors
+    val zoom = remember { ZoomHolder() }
+    LaunchedEffect(zoomEnabled) {
+        if (!zoomEnabled) zoom.reset()
+    }
+    val imageAspect = uiState.imageAspect
+    val outlineState = rememberUpdatedState(uiState.cutoutOutline)
+    val handleSlop = with(LocalDensity.current) { 28.dp.toPx() }
+    val pathSlop = with(LocalDensity.current) { 18.dp.toPx() }
+
+    Box(
+        modifier = modifier
+            .clipToBounds()
+            .then(
+                if (interactive && uiState.inCutoutSession) {
+                    Modifier.pointerInput(zoomEnabled, imageAspect, uiState.isTracing, uiState.isReviewingCutout) {
+                        var handle = -1
+                        var translating = false
+                        var last = Offset.Zero
+                        detectDrawOrZoom(
+                            onZoom = { centroid, pan, factor ->
+                                if (zoomEnabled) {
+                                    val box = Size(size.width.toFloat(), size.height.toFloat())
+                                    val next = applyZoomPan(zoom.scale, zoom.pan, factor, pan, centroid, box)
+                                    zoom.scale = next.first
+                                    zoom.pan = next.second
+                                }
+                            },
+                            onDrawStart = { visual ->
+                                val box = Size(size.width.toFloat(), size.height.toFloat())
+                                val content = visualToContent(visual, zoom.scale, zoom.pan, box)
+                                val imageRect = fitImageRect(box, imageAspect)
+                                if (uiState.isTracing) {
+                                    liveOutline.clear()
+                                    content.toNormalized(imageRect)?.let(liveOutline::add)
+                                } else {
+                                    val current = outlineState.value
+                                    val pts = current.map { it.toOffset(imageRect) }
+                                    val slopScale = zoom.scale.coerceAtLeast(1f)
+                                    handle = nearestIndex(content, pts, handleSlop / slopScale)
+                                    if (handle < 0) handle = nearestIndex(content, pts, pathSlop / slopScale)
+                                    val n = content.toNormalized(imageRect)
+                                    translating = handle < 0 && n != null && current.containsPoint(n.x, n.y)
+                                    last = content
+                                }
+                            },
+                            onDraw = { visual ->
+                                val box = Size(size.width.toFloat(), size.height.toFloat())
+                                val content = visualToContent(visual, zoom.scale, zoom.pan, box)
+                                val imageRect = fitImageRect(box, imageAspect)
+                                if (uiState.isTracing) {
+                                    val next = content.toNormalized(imageRect)
+                                    if (next != null) {
+                                        val lastPoint = liveOutline.lastOrNull()
+                                        if (lastPoint == null || farEnough(lastPoint, next)) liveOutline.add(next)
+                                    }
+                                } else {
+                                    val n = content.toNormalized(imageRect)
+                                    if (n != null) {
+                                        if (handle >= 0) {
+                                            viewModel.onOutlinePointMoved(handle, n)
+                                        } else if (translating) {
+                                            val prev = last.toNormalized(imageRect)
+                                            if (prev != null) {
+                                                viewModel.onOutlineTranslated(n.x - prev.x, n.y - prev.y)
+                                            }
+                                        }
+                                        last = content
+                                    }
+                                }
+                            },
+                            onDrawEnd = {
+                                if (uiState.isTracing) viewModel.onTraceCompleted(liveOutline.toList())
+                                handle = -1
+                                translating = false
+                            },
+                            onDrawCancel = {
+                                if (uiState.isTracing) liveOutline.clear()
+                                handle = -1
+                                translating = false
+                            },
+                        )
+                    }
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = zoom.scale
+                    scaleY = zoom.scale
+                    translationX = zoom.pan.x
+                    translationY = zoom.pan.y
+                },
+        ) {
+            val preview = uiState.displayUri
+            if (preview != null) {
+                AsyncImage(
+                    model = preview,
+                    contentDescription = stringResource(R.string.cd_preview),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                Text(
+                    stringResource(R.string.studio_empty_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
+            if (interactive && uiState.isTracing) {
+                TraceOverlay(imageAspect = imageAspect, outline = liveOutline)
+            } else if (interactive && uiState.isReviewingCutout) {
+                ReviewOverlay(imageAspect = imageAspect, outline = uiState.cutoutOutline)
+            }
         }
         if (uiState.isBusy) {
             Box(
@@ -382,33 +642,10 @@ private fun ToolsSection(uiState: StudioUiState, viewModel: StudioViewModel) {
 @Composable
 private fun TraceOverlay(
     imageAspect: Float,
-    outline: MutableList<NormalizedPoint>,
-    onCompleted: (List<NormalizedPoint>) -> Unit,
+    outline: List<NormalizedPoint>,
 ) {
     val accent = MaterialTheme.colorScheme.primary
-    Canvas(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(imageAspect) {
-                val imageRect = fitImageRect(
-                    Size(size.width.toFloat(), size.height.toFloat()),
-                    imageAspect,
-                )
-                detectDragGestures(
-                    onDragStart = { pos ->
-                        outline.clear()
-                        pos.toNormalized(imageRect)?.let(outline::add)
-                    },
-                    onDragEnd = { onCompleted(outline.toList()) },
-                    onDragCancel = { outline.clear() },
-                ) { change, _ ->
-                    change.consume()
-                    val next = change.position.toNormalized(imageRect) ?: return@detectDragGestures
-                    val last = outline.lastOrNull()
-                    if (last == null || farEnough(last, next)) outline.add(next)
-                }
-            },
-    ) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
         val imageRect = fitImageRect(size, imageAspect)
         if (outline.size < 2) return@Canvas
         val path = outline.toComposePath(imageRect)
@@ -436,60 +673,10 @@ private fun TraceOverlay(
 private fun ReviewOverlay(
     imageAspect: Float,
     outline: List<NormalizedPoint>,
-    onPointMoved: (Int, NormalizedPoint) -> Unit,
-    onTranslated: (Float, Float) -> Unit,
 ) {
     val accent = MaterialTheme.colorScheme.primary
     val dim = MaterialTheme.extraColors.overlayScrim.copy(alpha = 0.45f)
-    val outlineState = rememberUpdatedState(outline)
-    val handleSlop = with(LocalDensity.current) { 28.dp.toPx() }
-    val pathSlop = with(LocalDensity.current) { 18.dp.toPx() }
-    Canvas(
-        modifier = Modifier
-            .fillMaxSize()
-            .pointerInput(imageAspect) {
-                var handle = -1
-                var translating = false
-                var last = Offset.Zero
-                detectDragGestures(
-                    onDragStart = { pos ->
-                        val imageRect = fitImageRect(
-                            Size(size.width.toFloat(), size.height.toFloat()),
-                            imageAspect,
-                        )
-                        val current = outlineState.value
-                        val pts = current.map { it.toOffset(imageRect) }
-                        handle = nearestIndex(pos, pts, handleSlop)
-                        if (handle < 0) handle = nearestIndex(pos, pts, pathSlop)
-                        val n = pos.toNormalized(imageRect)
-                        translating = handle < 0 && n != null && current.containsPoint(n.x, n.y)
-                        last = pos
-                    },
-                    onDragEnd = {
-                        handle = -1
-                        translating = false
-                    },
-                    onDragCancel = {
-                        handle = -1
-                        translating = false
-                    },
-                ) { change, _ ->
-                    change.consume()
-                    val imageRect = fitImageRect(
-                        Size(size.width.toFloat(), size.height.toFloat()),
-                        imageAspect,
-                    )
-                    val n = change.position.toNormalized(imageRect) ?: return@detectDragGestures
-                    if (handle >= 0) {
-                        onPointMoved(handle, n)
-                    } else if (translating) {
-                        val prev = last.toNormalized(imageRect)
-                        if (prev != null) onTranslated(n.x - prev.x, n.y - prev.y)
-                    }
-                    last = change.position
-                }
-            },
-    ) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
         val imageRect = fitImageRect(size, imageAspect)
         if (outline.size < 2) return@Canvas
         val path = outline.toComposePath(imageRect)
@@ -603,12 +790,18 @@ private fun LayersSection(uiState: StudioUiState, viewModel: StudioViewModel) {
             )
         }
     }
+    Text(
+        stringResource(R.string.studio_layers_hint),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     uiState.layers.forEach { layer ->
         LayerRow(
             layer = layer,
             selected = layer.id == uiState.selectedLayerId,
             onSelect = { viewModel.onLayerSelected(layer.id) },
             onToggleVisibility = { viewModel.onToggleLayerVisibility(layer.id) },
+            allLayers = uiState.document?.layers.orEmpty(),
         )
     }
 }
@@ -619,6 +812,7 @@ private fun LayerRow(
     selected: Boolean,
     onSelect: () -> Unit,
     onToggleVisibility: () -> Unit,
+    allLayers: List<Layer>,
 ) {
     val container =
         if (selected) MaterialTheme.colorScheme.secondaryContainer
@@ -643,7 +837,7 @@ private fun LayerRow(
             )
         }
         Text(
-            text = stringResource(layerTitleRes(layer)),
+            text = layerTitle(layer, allLayers),
             style = MaterialTheme.typography.bodyLarge,
             color = content,
             modifier = Modifier.weight(1f),
@@ -651,16 +845,28 @@ private fun LayerRow(
     }
 }
 
-private fun layerTitleRes(layer: Layer): Int = when (layer.id) {
-    LayerIds.BACKGROUND -> R.string.studio_layer_background
-    LayerIds.SUBJECT -> R.string.studio_layer_subject
-    LayerIds.FILL -> R.string.studio_layer_fill
-    LayerIds.REPLACEMENT -> R.string.studio_layer_replacement
-    LayerIds.ADJUSTMENT -> {
+private fun layerTitleRes(layer: Layer): Int = when {
+    layer.id == LayerIds.BACKGROUND -> R.string.studio_layer_background
+    LayerIds.isSubject(layer.id) -> R.string.studio_layer_subject
+    layer.id == LayerIds.FILL -> R.string.studio_layer_fill
+    layer.id == LayerIds.REPLACEMENT -> R.string.studio_layer_replacement
+    layer.id == LayerIds.ADJUSTMENT -> {
         val grayscale = (layer.content as? LayerContent.Adjustment)?.grayscale == true
         if (grayscale) R.string.studio_layer_adjustment else R.string.studio_background_blur
     }
     else -> R.string.studio_layer_generic
+}
+
+@Composable
+private fun layerTitle(layer: Layer, allLayers: List<Layer>): String {
+    if (LayerIds.isSubject(layer.id)) {
+        val subjects = allLayers.filter { LayerIds.isSubject(it.id) }
+        if (subjects.size > 1) {
+            val n = subjects.indexOfFirst { it.id == layer.id } + 1
+            return stringResource(R.string.studio_layer_subject_n, n)
+        }
+    }
+    return stringResource(layerTitleRes(layer))
 }
 
 private val FILL_COLORS = listOf(
@@ -779,5 +985,90 @@ private fun farEnough(a: NormalizedPoint, b: NormalizedPoint): Boolean {
     return dx * dx + dy * dy >= MIN_TRACE_STEP_SQ
 }
 
+private class ZoomHolder {
+    var scale by mutableFloatStateOf(1f)
+    var pan by mutableStateOf(Offset.Zero)
+    fun reset() {
+        scale = 1f
+        pan = Offset.Zero
+    }
+}
+
+private suspend fun PointerInputScope.detectDrawOrZoom(
+    onZoom: (centroid: Offset, pan: Offset, zoom: Float) -> Unit,
+    onDrawStart: (Offset) -> Unit,
+    onDraw: (Offset) -> Unit,
+    onDrawEnd: () -> Unit,
+    onDrawCancel: () -> Unit,
+) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        var zoomed = false
+        var drawing = false
+        onDrawStart(down.position)
+        drawing = true
+        try {
+            while (true) {
+                val event = awaitPointerEvent()
+                val pressed = event.changes.filter { it.pressed }
+                if (pressed.isEmpty()) break
+                if (pressed.size >= 2) {
+                    if (drawing) {
+                        onDrawCancel()
+                        drawing = false
+                    }
+                    zoomed = true
+                    onZoom(event.calculateCentroid(), event.calculatePan(), event.calculateZoom())
+                    event.changes.forEach { it.consume() }
+                } else if (!zoomed) {
+                    drawing = true
+                    val pos = pressed.first().position
+                    onDraw(pos)
+                    pressed.forEach { it.consume() }
+                }
+            }
+            if (drawing) onDrawEnd()
+        } catch (c: CancellationException) {
+            if (drawing) onDrawCancel()
+            throw c
+        }
+    }
+}
+
+private fun visualToContent(visual: Offset, scale: Float, pan: Offset, box: Size): Offset {
+    val center = Offset(box.width / 2f, box.height / 2f)
+    return Offset(
+        (visual.x - pan.x - center.x) / scale + center.x,
+        (visual.y - pan.y - center.y) / scale + center.y,
+    )
+}
+
+private fun applyZoomPan(
+    scale: Float,
+    pan: Offset,
+    zoom: Float,
+    panDelta: Offset,
+    centroid: Offset,
+    box: Size,
+): Pair<Float, Offset> {
+    val newScale = (scale * zoom).coerceIn(MIN_CUTOUT_ZOOM, MAX_CUTOUT_ZOOM)
+    val actualZoom = if (scale == 0f) 1f else newScale / scale
+    val center = Offset(box.width / 2f, box.height / 2f)
+    var newPan = Offset(
+        centroid.x - (centroid.x - pan.x - center.x) * actualZoom - center.x + panDelta.x,
+        centroid.y - (centroid.y - pan.y - center.y) * actualZoom - center.y + panDelta.y,
+    )
+    if (newScale <= 1.01f) {
+        newPan = Offset.Zero
+    } else {
+        val maxX = (box.width * (newScale - 1f)) / 2f
+        val maxY = (box.height * (newScale - 1f)) / 2f
+        newPan = Offset(newPan.x.coerceIn(-maxX, maxX), newPan.y.coerceIn(-maxY, maxY))
+    }
+    return newScale to newPan
+}
+
 private const val MIN_TRACE_STEP_SQ = 0.000016f
+private const val MIN_CUTOUT_ZOOM = 1f
+private const val MAX_CUTOUT_ZOOM = 8f
 
