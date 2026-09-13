@@ -40,9 +40,11 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.momi.watermarker.R
+import com.momi.watermarker.domain.model.normalizeRotationDegrees
 import com.momi.watermarker.presentation.theme.extraColors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -54,12 +56,14 @@ import kotlinx.coroutines.isActive
  * is hidden; a fullscreen control on the player expands the preview and locks
  * the screen to landscape or portrait from the clip's aspect ratio.
  */
+@OptIn(UnstableApi::class)
 @Composable
 fun VideoPreview(
     uri: String?,
     modifier: Modifier = Modifier,
     placeholder: String? = null,
     autoPlay: Boolean = false,
+    rotationDegrees: Int = 0,
 ) {
     val context = LocalContext.current
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
@@ -78,12 +82,18 @@ fun VideoPreview(
         onDispose { exoPlayer.release() }
     }
 
-    DisposableEffect(exoPlayer) {
+    DisposableEffect(exoPlayer, rotationDegrees) {
         val listener = object : Player.Listener {
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 videoWidth = videoSize.width
                 videoHeight = videoSize.height
                 pixelRatio = videoSize.pixelWidthHeightRatio
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    applyPreviewRotation(exoPlayer, rotationDegrees)
+                }
             }
         }
         exoPlayer.addListener(listener)
@@ -125,6 +135,11 @@ fun VideoPreview(
             positionMs = 0L
             durationMs = 0L
         }
+    }
+
+    LaunchedEffect(uri, rotationDegrees) {
+        if (uri == null) return@LaunchedEffect
+        applyPreviewRotation(exoPlayer, rotationDegrees)
     }
 
     LaunchedEffect(uri, exoPlayer) {
@@ -294,6 +309,22 @@ private fun Context.findActivity(): Activity? {
         current = current.baseContext
     }
     return null
+}
+
+@OptIn(UnstableApi::class)
+private fun applyPreviewRotation(player: ExoPlayer, rotationDegrees: Int) {
+    val degrees = normalizeRotationDegrees(rotationDegrees)
+    if (degrees == 0) {
+        player.setVideoEffects(emptyList())
+    } else {
+        player.setVideoEffects(
+            listOf(
+                ScaleAndRotateTransformation.Builder()
+                    .setRotationDegrees(degrees.toFloat())
+                    .build(),
+            ),
+        )
+    }
 }
 
 /** Formats a millisecond offset as `m:ss.SSS` (or `h:mm:ss.SSS`). */

@@ -17,4 +17,11 @@ data class VideoSegment(
     val speed: Float = 1f,
     /** Reframe this segment to this aspect ratio (width/height); null keeps its own. */
     val aspectRatio: Float? = null,
+    /**
+     * When [aspectRatio] is set, letterbox (true) instead of crop-to-fill (false).
+     * Merge uses letterbox so mixed portrait/landscape clips stay upright.
+     */
+    val scaleToFit: Boolean = false,
+    /** Clockwise rotation baked into this segment on export (`0/90/180/270`). */
+    val rotationDegrees: Int = 0,
 )

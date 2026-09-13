@@ -18,6 +18,7 @@ import androidx.media3.effect.OverlaySettings
 import androidx.media3.effect.Presentation
 import androidx.media3.effect.RgbAdjustment
 import androidx.media3.effect.RgbFilter
+import androidx.media3.effect.ScaleAndRotateTransformation
 import androidx.media3.effect.TextureOverlay
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.EditedMediaItem
@@ -67,6 +68,10 @@ class VideoTransformer @Inject constructor(
          * [ExportSpec.aspectRatio]. Lets merged sources each be framed differently.
          */
         val aspectRatio: Float? = null,
+        /** Letterbox into [aspectRatio] instead of cropping. */
+        val scaleToFit: Boolean = false,
+        /** Clockwise rotation applied before reframe (`0/90/180/270`). */
+        val rotationDegrees: Int = 0,
     )
 
     /** The animation played at a boundary between two clips. */
@@ -181,13 +186,20 @@ class VideoTransformer @Inject constructor(
                         audioProcessors.add(speedPair.first)
                         videoEffects.add(speedPair.second)
                     }
-                    (clip.aspectRatio ?: spec.aspectRatio)?.let { ratio ->
+                    if (clip.rotationDegrees % 360 != 0) {
                         videoEffects.add(
-                            Presentation.createForAspectRatio(
-                                ratio,
-                                Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP,
-                            ),
+                            ScaleAndRotateTransformation.Builder()
+                                .setRotationDegrees(clip.rotationDegrees.toFloat())
+                                .build(),
                         )
+                    }
+                    (clip.aspectRatio ?: spec.aspectRatio)?.let { ratio ->
+                        val layout = if (clip.scaleToFit) {
+                            Presentation.LAYOUT_SCALE_TO_FIT
+                        } else {
+                            Presentation.LAYOUT_SCALE_TO_FIT_WITH_CROP
+                        }
+                        videoEffects.add(Presentation.createForAspectRatio(ratio, layout))
                     }
                     videoEffects.addAll(sharedEffects)
 

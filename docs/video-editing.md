@@ -130,7 +130,7 @@ building a different request, **not** a new pipeline. Shipped so far:
 | Op | How | Status |
 |---|---|---|
 | Trim / Cut & Join | N clipped segments, same source, concatenated (N=1 is a plain trim — no separate Trim op). Optional **exclude** mode inverts the marked ranges | ✅ |
-| Merge | N whole segments, different sources, `experimentalSetForceAudioTrack(true)` | ✅ |
+| Merge | N whole segments, different sources, per-clip rotation + letterbox canvas, `experimentalSetForceAudioTrack(true)` | ✅ |
 | Remove Sound | `EditedMediaItem.setRemoveAudio(true)` | ✅ |
 | Aspect Ratio | `Presentation.createForAspectRatio(r, LAYOUT_SCALE_TO_FIT_WITH_CROP)` | ✅ |
 | Image Overlay | `OverlayEffect` + `BitmapOverlay` w/ `OverlaySettings.alphaScale` | ✅ |
@@ -234,3 +234,6 @@ plus `round(D·fps)` baked frames (fps 24, JPEG, ≤1280px long edge). `D` clamp
   plus slider). Segment labels and the ExoPlayer preview clock show `m:ss.SSS`.
 - **2026-09-13** — Apply plays the result in the **top player** (Original / Demo toggle).
   Demo locks the op controls and is the only mode that can save; optional file name.
+- **2026-09-14** — Merge respects clip orientation: metadata rotation is the default,
+  each clip can be rotated ±90° before Apply, and mixed portrait/landscape sources
+  letterbox into a shared output frame.

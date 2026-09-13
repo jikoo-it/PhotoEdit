@@ -3,6 +3,7 @@ package com.momi.watermarker.domain.repository
 import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoEditRequest
+import com.momi.watermarker.domain.model.VideoMetadata
 import com.momi.watermarker.domain.model.VideoSegment
 import com.momi.watermarker.domain.util.Outcome
 
@@ -20,6 +21,9 @@ interface VideoRepository {
 
     /** Reads the duration (ms) of the video at [clip]. */
     suspend fun getDurationMs(clip: VideoClip): Outcome<Long>
+
+    /** Reads duration, encoded size, and display rotation of [clip]. */
+    suspend fun getMetadata(clip: VideoClip): Outcome<VideoMetadata>
 
     /**
      * Runs [request] through the Media3 pipeline and writes the result to the

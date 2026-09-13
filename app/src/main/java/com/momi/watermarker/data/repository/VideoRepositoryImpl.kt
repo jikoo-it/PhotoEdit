@@ -12,6 +12,7 @@ import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoColorFilter
 import com.momi.watermarker.domain.model.VideoEditRequest
+import com.momi.watermarker.domain.model.VideoMetadata
 import com.momi.watermarker.domain.model.VideoSegment
 import com.momi.watermarker.domain.model.VideoTransition
 import com.momi.watermarker.domain.repository.VideoRepository
@@ -38,6 +39,11 @@ class VideoRepositoryImpl @Inject constructor(
             Outcome.catching { videoStorage.probeDurationMs(Uri.parse(clip.uri)) }
         }
 
+    override suspend fun getMetadata(clip: VideoClip): Outcome<VideoMetadata> =
+        withContext(dispatcher) {
+            Outcome.catching { videoStorage.probeMetadata(Uri.parse(clip.uri)) }
+        }
+
     override suspend fun export(request: VideoEditRequest): Outcome<VideoClip> =
         Outcome.catching {
             // VideoTransformer manages its own (main-thread) execution, so this
@@ -54,6 +60,8 @@ class VideoRepositoryImpl @Inject constructor(
                         imageDurationMs = segment.imageDurationMs,
                         speed = segment.speed,
                         aspectRatio = segment.aspectRatio,
+                        scaleToFit = segment.scaleToFit,
+                        rotationDegrees = segment.rotationDegrees,
                     )
                 },
                 removeAudio = request.removeAudio,

@@ -13,7 +13,7 @@ the gallery.
 | Op | What it does |
 | --- | --- |
 | **Trim / Cut & Join** | Keep one section of a video (trim), or several sections stitched together in order — **or** turn on **Exclude sections** and mark the parts to cut out; the leftover is joined. Trim is the single-segment keep case. Ranges are chosen with millisecond precision: type start/end in **ms**, or drag the slider; labels and the preview clock use `m:ss.SSS`. Each *kept* section also has its own **playback speed** (0.25×–4×, slow-mo to fast-forward), applied to both audio and video. |
-| **Merge** | Concatenate multiple videos into one. Each clip can be **reframed independently** (16:9, 1:1, 9:16, 4:3, or its original ratio) so mismatched sources line up. Clips with differing audio presence are reconciled via `experimentalSetForceAudioTrack`. |
+| **Merge** | Concatenate multiple videos into one. Each clip can be **rotated** (±90°) so phone videos stay upright, and **reframed independently** (16:9, 1:1, 9:16, 4:3, or its original ratio). A shared **output frame** letterboxes mixed portrait/landscape clips (Original uses the first clip’s displayed ratio). Tap a clip to preview it, rotate until it looks right, then Apply. Clips with differing audio presence are reconciled via `experimentalSetForceAudioTrack`. |
 | **Remove Sound** | Strip the audio track (`EditedMediaItem.setRemoveAudio`). |
 | **Aspect Ratio** | Reframe to 16:9, 1:1, 9:16, or 4:3 (`Presentation.createForAspectRatio`, scale-to-fit-with-crop). |
 | **Color Filter** | Apply a preset look to the whole video: B&W, Invert, Warm, Cool, Bright, Dark, or Punch (see [Color filters](#color-filters)). |

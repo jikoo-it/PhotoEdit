@@ -23,11 +23,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -377,6 +382,7 @@ private fun SourcePlayerSection(
         Box {
             VideoPreview(
                 uri = uiState.playerUri,
+                rotationDegrees = uiState.previewRotationDegrees,
                 autoPlay = demo,
                 placeholder = placeholder,
                 modifier = Modifier
@@ -661,13 +667,54 @@ private fun MergeList(
     viewModel: VideoEditorViewModel,
     enabled: Boolean = true,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             stringResource(R.string.merge_videos_count, uiState.sources.size),
             style = MaterialTheme.typography.bodyMedium,
         )
-        uiState.sources.forEachIndexed { index, _ ->
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            stringResource(R.string.merge_orientation_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            stringResource(R.string.merge_output_frame),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+        ) {
+            AspectRatioOption.entries.forEach { option ->
+                FilterChip(
+                    selected = option == uiState.mergeCanvas,
+                    onClick = { viewModel.onMergeCanvasChanged(option) },
+                    enabled = enabled,
+                    label = { Text(stringResource(option.labelRes)) },
+                )
+            }
+        }
+        uiState.sources.forEachIndexed { index, clip ->
+            val selected = index == uiState.selectedSourceIndex
+            Column(
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .then(
+                        if (selected) {
+                            Modifier.border(
+                                2.dp,
+                                MaterialTheme.colorScheme.primary,
+                                RoundedCornerShape(8.dp),
+                            )
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .clickable { viewModel.onMergeClipSelected(index) }
+                    .padding(8.dp),
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         stringResource(R.string.clip_n, index + 1, index + 1),
@@ -683,23 +730,52 @@ private fun MergeList(
                         enabled = enabled && index < uiState.sources.lastIndex,
                     ) { Text(stringResource(R.string.move_down)) }
                 }
-                // Per-clip reframe: "Original" keeps this clip's own ratio.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.merge_clip_orientation, clip.rotationDegrees),
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    IconButton(
+                        onClick = { viewModel.onMergeRotationChanged(index, -90) },
+                        enabled = enabled,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.RotateLeft,
+                            contentDescription = stringResource(R.string.cd_rotate_left),
+                        )
+                    }
+                    IconButton(
+                        onClick = { viewModel.onMergeRotationChanged(index, 90) },
+                        enabled = enabled,
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.RotateRight,
+                            contentDescription = stringResource(R.string.cd_rotate_right),
+                        )
+                    }
+                }
+                Text(
+                    stringResource(R.string.merge_clip_reframe),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                 ) {
-                    val selected = uiState.mergeAspects.getOrElse(index) { AspectRatioOption.ORIGINAL }
+                    val aspect = uiState.mergeAspects.getOrElse(index) { AspectRatioOption.ORIGINAL }
                     AspectRatioOption.entries.forEach { option ->
                         FilterChip(
-                            selected = option == selected,
+                            selected = option == aspect,
                             onClick = { viewModel.onMergeAspectChanged(index, option) },
                             enabled = enabled,
                             label = { Text(stringResource(option.labelRes)) },
                         )
                     }
                 }
-                HorizontalDivider()
             }
+            HorizontalDivider()
         }
     }
 }

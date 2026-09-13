@@ -21,18 +21,29 @@ class MergeVideosUseCase @Inject constructor(
      * @param aspectRatios optional per-clip reframe (width/height); an entry may
      *   be null to keep that clip's own ratio. When shorter than [clips], missing
      *   entries default to null.
+     * @param outputAspectRatio shared canvas (width/height). Null uses the first
+     *   clip's displayed ratio after rotation so mixed portrait/landscape clips
+     *   letterbox instead of coming out sideways.
      */
     suspend operator fun invoke(
         clips: List<VideoClip>,
         aspectRatios: List<Float?> = emptyList(),
+        outputAspectRatio: Float? = null,
     ): Outcome<VideoClip> {
         if (clips.size < 2) {
             return Outcome.Failure(
                 IllegalArgumentException("Pick at least two videos to merge."),
             )
         }
+        val canvas = outputAspectRatio ?: clips.first().displayAspectRatioOrNull()
         val segments = clips.mapIndexed { index, clip ->
-            VideoSegment(clip.uri, aspectRatio = aspectRatios.getOrNull(index))
+            val perClip = aspectRatios.getOrNull(index)
+            VideoSegment(
+                uri = clip.uri,
+                aspectRatio = perClip ?: canvas,
+                scaleToFit = perClip == null && canvas != null,
+                rotationDegrees = clip.rotationDegrees,
+            )
         }
         return videoRepository.export(
             VideoEditRequest(segments = segments, forceAudioTrack = true),

@@ -12,11 +12,13 @@ import com.momi.watermarker.domain.model.complementWithin
 import com.momi.watermarker.domain.model.SlideTransition
 import com.momi.watermarker.domain.model.VideoClip
 import com.momi.watermarker.domain.model.VideoColorFilter
+import com.momi.watermarker.domain.model.normalizeRotationDegrees
 import com.momi.watermarker.domain.usecase.ApplyVideoFilterUseCase
 import com.momi.watermarker.domain.usecase.ChangeAspectRatioUseCase
 import com.momi.watermarker.domain.usecase.CreateSlideshowUseCase
 import com.momi.watermarker.domain.usecase.CutAndJoinVideoUseCase
 import com.momi.watermarker.domain.usecase.GetVideoDurationUseCase
+import com.momi.watermarker.domain.usecase.GetVideoMetadataUseCase
 import com.momi.watermarker.domain.usecase.MergeVideosUseCase
 import com.momi.watermarker.domain.usecase.OverlayImageUseCase
 import com.momi.watermarker.domain.usecase.RemoveAudioUseCase
@@ -41,6 +43,7 @@ import javax.inject.Inject
 class VideoEditorViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val getVideoDuration: GetVideoDurationUseCase,
+    private val getVideoMetadata: GetVideoMetadataUseCase,
     private val cutAndJoin: CutAndJoinVideoUseCase,
     private val mergeVideos: MergeVideosUseCase,
     private val removeAudio: RemoveAudioUseCase,
@@ -103,12 +106,76 @@ class VideoEditorViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 sources = uris.map(::VideoClip),
-                // One reframe slot per source (defaults to keeping each source's ratio).
                 mergeAspects = List(uris.size) { AspectRatioOption.ORIGINAL },
+                mergeCanvas = AspectRatioOption.ORIGINAL,
+                selectedSourceIndex = 0,
                 resultClip = null,
                 showDemoPreview = false,
             )
         }
+        viewModelScope.launch {
+            val probed = uris.map { uri ->
+                when (val meta = getVideoMetadata(VideoClip(uri))) {
+                    is Outcome.Success -> VideoClip(
+                        uri = uri,
+                        durationMs = meta.data.durationMs,
+                        encodedWidth = meta.data.encodedWidth,
+                        encodedHeight = meta.data.encodedHeight,
+                        metadataRotationDegrees = meta.data.rotationDegrees,
+                        rotationDegrees = meta.data.rotationDegrees,
+                    )
+                    is Outcome.Failure -> VideoClip(uri)
+                }
+            }
+            _uiState.update { state ->
+                if (state.op != VideoOp.MERGE) state
+                else {
+                    val byUri = probed.associateBy { it.uri }
+                    state.copy(
+                        sources = state.sources.map { current ->
+                            val probedClip = byUri[current.uri] ?: return@map current
+                            val userChangedRotation =
+                                current.rotationDegrees != current.metadataRotationDegrees
+                            probedClip.copy(
+                                rotationDegrees = if (userChangedRotation) {
+                                    current.rotationDegrees
+                                } else {
+                                    probedClip.rotationDegrees
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    fun onMergeClipSelected(index: Int) {
+        _uiState.update { state ->
+            if (index !in state.sources.indices) state
+            else state.copy(selectedSourceIndex = index, showDemoPreview = false)
+        }
+    }
+
+    fun onMergeRotationChanged(index: Int, deltaDegrees: Int) {
+        updateEditing { state ->
+            if (index !in state.sources.indices) state
+            else {
+                val next = normalizeRotationDegrees(
+                    state.sources[index].rotationDegrees + deltaDegrees,
+                )
+                state.copy(
+                    sources = state.sources.mapIndexed { i, clip ->
+                        if (i == index) clip.copy(rotationDegrees = next) else clip
+                    },
+                    selectedSourceIndex = index,
+                ).invalidatingResult()
+            }
+        }
+    }
+
+    fun onMergeCanvasChanged(option: AspectRatioOption) {
+        updateEditing { it.copy(mergeCanvas = option).invalidatingResult() }
     }
 
     /** Per-source reframe for a merged clip. */
@@ -324,7 +391,11 @@ class VideoEditorViewModel @Inject constructor(
                     aspects.add(to, aspects.removeAt(from))
                 }
             }
-            state.copy(sources = list, mergeAspects = aspects).invalidatingResult()
+            state.copy(
+                sources = list,
+                mergeAspects = aspects,
+                selectedSourceIndex = movedSelectionIndex(state.selectedSourceIndex, from, to, list.size),
+            ).invalidatingResult()
         }
     }
 
@@ -367,7 +438,12 @@ class VideoEditorViewModel @Inject constructor(
                 VideoOp.CUT_JOIN ->
                     cutAndJoin(source!!, state.resolvedKeepRanges)
                 VideoOp.MERGE ->
-                    mergeVideos(state.sources, state.mergeAspects.map { it.ratio })
+                    mergeVideos(
+                        state.sources,
+                        state.mergeAspects.map { it.ratio },
+                        outputAspectRatio = state.mergeCanvas.ratio
+                            ?: state.sources.firstOrNull()?.displayAspectRatioOrNull(),
+                    )
                 VideoOp.REMOVE_AUDIO ->
                     removeAudio(source!!)
                 VideoOp.ASPECT_RATIO ->
@@ -451,4 +527,15 @@ class VideoEditorViewModel @Inject constructor(
     /** Full clip when keeping; a centered slice when excluding, so something remains. */
     private fun defaultCutRange(exclude: Boolean, durationMs: Long): TrimRange =
         if (exclude) TrimRange.centeredSlice(durationMs) else TrimRange.covering(durationMs)
+}
+
+/** Where [selected] lands after moving an item from [from] to [to]. */
+internal fun movedSelectionIndex(selected: Int, from: Int, to: Int, size: Int): Int {
+    if (from !in 0 until size || to !in 0 until size) return selected
+    return when {
+        selected == from -> to
+        from < to && selected in (from + 1)..to -> selected - 1
+        to < from && selected in to until from -> selected + 1
+        else -> selected
+    }
 }

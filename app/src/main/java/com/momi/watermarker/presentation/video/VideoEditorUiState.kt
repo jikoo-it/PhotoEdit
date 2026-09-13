@@ -63,6 +63,13 @@ data class VideoEditorUiState(
     val aspectRatio: AspectRatioOption = AspectRatioOption.ORIGINAL,
     /** Per-source reframe for Merge, parallel to [sources]; kept in sync on add/reorder. */
     val mergeAspects: List<AspectRatioOption> = emptyList(),
+    /**
+     * Shared merge canvas. [AspectRatioOption.ORIGINAL] uses the first clip's
+     * displayed ratio after rotation.
+     */
+    val mergeCanvas: AspectRatioOption = AspectRatioOption.ORIGINAL,
+    /** Which source is shown in the top player (merge). */
+    val selectedSourceIndex: Int = 0,
     // Color filter (whole-video look)
     val colorFilter: VideoColorFilter = VideoColorFilter.NONE,
     // Overlay
@@ -103,9 +110,17 @@ data class VideoEditorUiState(
     /** Demo is the processed result playing in the top player. */
     val isDemoPreview: Boolean get() = showDemoPreview && resultClip != null
 
-    /** URI for the top player: demo result, else the first source. */
+    /** URI for the top player: demo result, else the selected source. */
     val playerUri: String?
-        get() = if (isDemoPreview) resultClip?.uri else primarySource?.uri
+        get() = if (isDemoPreview) {
+            resultClip?.uri
+        } else {
+            sources.getOrNull(selectedSourceIndex)?.uri ?: primarySource?.uri
+        }
+
+    val previewRotationDegrees: Int
+        get() = if (isDemoPreview) 0
+        else sources.getOrNull(selectedSourceIndex)?.previewRotationDelta ?: 0
 
     /**
      * Ranges actually sent to cut-and-join: the marked windows as-is, or the

@@ -353,6 +353,12 @@
     <string name="speed_value">Speed: %1$.2f×</string>
     <string name="add_segment">+ Add segment</string>
     <string name="merge_videos_count">%1$d videos — played top to bottom:</string>
+    <string name="merge_orientation_hint">Tap a clip to preview it. Rotate until it looks upright, then Apply. Original output frame letterboxes mixed portrait and landscape clips.</string>
+    <string name="merge_output_frame">Output frame:</string>
+    <string name="merge_clip_orientation">Orientation: %1$d°</string>
+    <string name="merge_clip_reframe">Reframe this clip:</string>
+    <string name="cd_rotate_left">Rotate left</string>
+    <string name="cd_rotate_right">Rotate right</string>
     <string name="clip_n">%1$d. Clip %2$d</string>
     <string name="move_up">↑</string>
     <string name="move_down">↓</string>

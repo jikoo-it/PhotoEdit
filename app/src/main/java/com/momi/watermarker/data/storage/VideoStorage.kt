@@ -14,6 +14,8 @@ import android.provider.MediaStore
 import android.util.Size
 import kotlin.math.roundToInt
 import androidx.core.content.FileProvider
+import com.momi.watermarker.domain.model.VideoMetadata
+import com.momi.watermarker.domain.model.normalizeRotationDegrees
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
@@ -119,26 +121,46 @@ class VideoStorage @Inject constructor(
     }
 
     /**
+     * Duration, encoded size, and clockwise display rotation of the video at
+     * [uri]. Rotation is normalized to 0/90/180/270.
+     */
+    fun probeMetadata(uri: Uri): VideoMetadata {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull()
+                ?: error("No duration metadata for $uri")
+            val width = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+                ?.toIntOrNull() ?: 1920
+            val height = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+                ?.toIntOrNull() ?: 1080
+            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+                ?.toIntOrNull() ?: 0
+            VideoMetadata(
+                durationMs = duration,
+                encodedWidth = width,
+                encodedHeight = height,
+                rotationDegrees = normalizeRotationDegrees(rotation),
+            )
+        } finally {
+            retriever.release()
+        }
+    }
+
+    /**
      * The displayed pixel size (width × height, accounting for rotation) of the
      * video at [uri]. Falls back to 1920×1080 if metadata is unavailable, so
      * overlay sizing always has a sensible frame to scale against.
      */
     fun probeDisplaySize(uri: Uri): Size {
-        val retriever = MediaMetadataRetriever()
         return try {
-            retriever.setDataSource(context, uri)
-            val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
-                ?.toIntOrNull() ?: 1920
-            val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
-                ?.toIntOrNull() ?: 1080
-            val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
-                ?.toIntOrNull() ?: 0
-            // A 90°/270° rotation swaps the displayed width and height.
-            if (rotation == 90 || rotation == 270) Size(h, w) else Size(w, h)
+            val meta = probeMetadata(uri)
+            val quarterTurn = meta.rotationDegrees % 180 != 0
+            if (quarterTurn) Size(meta.encodedHeight, meta.encodedWidth)
+            else Size(meta.encodedWidth, meta.encodedHeight)
         } catch (t: Throwable) {
             Size(1920, 1080)
-        } finally {
-            retriever.release()
         }
     }
 

@@ -19,7 +19,7 @@ The app is organized into separate flows, each documented in its own README:
   (subject sharp, rest blurred and still in color), and backdrops (original,
   transparent, color, or another image).
 - **[Video Processing](README.video.md)** — trim / cut & join (keep *or* exclude
-  sections, with per-section speed), merge (with per-clip framing), remove audio,
+  sections, with per-section speed), merge (per-clip orientation and framing), remove audio,
   change aspect ratio, color filters, image/text overlays, and an images-to-video
   slideshow with transitions.
 
