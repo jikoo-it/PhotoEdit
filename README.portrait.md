@@ -1,10 +1,13 @@
-# MomiWaterMarker — Portrait Color
+# MomiWaterMarker — Portrait Color (processor)
 
-The **Portrait Color** tool (under **Single Image Processing** on the launch
-screen; see the other flows in [README.md](README.md)) keeps the detected
-person(s) in full color while turning the background grayscale, and optionally
-Gaussian-blurs the background for a depth-of-field look. Everything runs
-**on-device** — pick a portrait, toggle the effect, and save.
+> **User-facing flow:** [Studio](README.studio.md) under **Single Image
+> Processing**. Portrait look (black and white background) and background blur
+> (color preserved) are separate controls there. This README is the ML /
+> compositing note for the person-isolation processor Studio still calls.
+
+The portrait processor keeps detected person(s) in full color while turning
+the background grayscale, and can Gaussian-blur that background. Everything
+runs **on-device**.
 
 ## How it works
 

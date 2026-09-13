@@ -1,6 +1,7 @@
 package com.momi.watermarker.domain.repository
 
 import com.momi.watermarker.domain.model.CutoutRenderSpec
+import com.momi.watermarker.domain.model.NormalizedPoint
 import com.momi.watermarker.domain.util.Outcome
 
 /**
@@ -18,6 +19,22 @@ interface ImageCutoutRepository {
      * background made fully transparent).
      */
     suspend fun cutoutSubject(sourceUri: String): Outcome<String>
+
+    /**
+     * Detects the salient subject and returns a closed outline in normalized
+     * image coordinates. Nothing is written; the caller previews and may edit
+     * the outline before [cutoutPath].
+     */
+    suspend fun proposeSubjectOutline(sourceUri: String): Outcome<List<NormalizedPoint>>
+
+    /**
+     * Keeps the pixels inside the closed [outline] (normalized 0f..1f image
+     * coordinates) and makes everything else transparent. No ML is used.
+     */
+    suspend fun cutoutPath(
+        sourceUri: String,
+        outline: List<NormalizedPoint>,
+    ): Outcome<String>
 
     /**
      * Composites the already-extracted subject over the background described by

@@ -1,4 +1,4 @@
-# MomiWaterMarker
+# Momi Studio
 
 An Android image and video processing app. From a launch screen you pick a flow,
 edit your media with a live preview, and save the result back to your gallery.
@@ -11,17 +11,19 @@ The app is organized into separate flows, each documented in its own README:
   transform, resize, aspect-ratio padding, filters, adjustments, pixelate,
   frame, watermark, export) identically to a whole batch of images in a single
   pass.
-- **Single Image Processing** — per-photo tools, on-device:
-  - **[Portrait Color](README.portrait.md)** — keep the detected person(s) in
-    color, turn the background grayscale, and optionally blur it (ML Kit selfie
-    segmentation).
-  - **[Cut-out Studio](README.cutout.md)** — extract the subject of one photo
-    (ML Kit subject segmentation), then keep the background transparent, fill it
-    with a solid color, blur the original, or replace it with another image.
+- **[Single Image Processing](README.studio.md)** — one photo, one layer stack:
+  cut-out (auto outline you can drag before confirming, or trace by hand),
+  portrait look (subject in color, rest black and white), background blur
+  (subject sharp, rest blurred and still in color), and backdrops (original,
+  transparent, color, or another image).
 - **[Video Processing](README.video.md)** — trim, cut & join (with per-section
   speed), merge (with per-clip framing), remove audio, change aspect ratio,
   color filters, image/text overlays, and an images-to-video slideshow with
   transitions.
+
+Portrait-color and cut-out **processors** are documented in
+[README.portrait.md](README.portrait.md) and [README.cutout.md](README.cutout.md);
+the user-facing flow is Studio.
 
 ## Architecture
 
@@ -34,21 +36,24 @@ packages specific to each.
 presentation/            UI (Jetpack Compose) + MVVM
   AppRootScreen.kt       Chooser between the bulk-image, single-image, and video flows
   editor/                Bulk image editor     → README.image.md
-  single/                Single-image hub (portrait + cut-out)
-  portrait/              Portrait color        → README.portrait.md
-  cutout/                Single-image cut-out  → README.cutout.md
+  studio/                Layered single-image  → README.studio.md
+  portrait/              Portrait ML processor (used by Studio; screen unused)
+  cutout/                Cut-out ML processor  (used by Studio; screen unused)
   video/                 Video editor          → README.video.md
   theme/                 Material 3 theme
+  settings/              Theme + about
 
 domain/                  Pure Kotlin — no Android types
-  model/                 ImageOp (sealed) + Pipeline, watermark & export models,
-                         CutoutRenderSpec/BackgroundMode, PortraitEffect, video models
-  repository/            Image / Media / Cutout / Portrait / Video repositories (abstractions)
-  usecase/               One use case per action (image + cut-out + portrait + video)
+  model/                 ImageOp (sealed) + Pipeline, LayerDocument / Layer,
+                         watermark & export models, CutoutRenderSpec, PortraitEffect,
+                         video models
+  repository/            Image / Media / Cutout / Portrait / Studio / Video
+  usecase/               One use case per action
   util/                  Outcome<T> result type
 
 data/                    Framework implementations
-  rendering/             Per-op image processors + PipelineRenderer + CutoutComposer
+  rendering/             Per-op image processors + PipelineRenderer + LayerCompositor
+                         + PathCutout + MaskContour + CutoutComposer
                          + PortraitEffectProcessor + BitmapBlur
   mlkit/                 SubjectSegmenter + PersonSegmenter (ML Kit wrappers)
   storage/               ImageStorage (decode/EXIF, cache, MediaStore, FileProvider)

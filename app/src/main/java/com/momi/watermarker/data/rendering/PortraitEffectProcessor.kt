@@ -13,4 +13,10 @@ import com.momi.watermarker.domain.model.PortraitEffect
  */
 interface PortraitEffectProcessor {
     suspend fun apply(bitmap: Bitmap, effect: PortraitEffect): Bitmap
+
+    /**
+     * Returns a copy of [bitmap] where non-person pixels are fully transparent.
+     * The caller owns [bitmap] and the returned bitmap.
+     */
+    suspend fun extractForeground(bitmap: Bitmap): Bitmap
 }

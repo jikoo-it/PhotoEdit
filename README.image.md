@@ -6,9 +6,8 @@ The **Bulk Image Processing** flow applies one edit stack identically to a whole
 adjustments, pixelate, frame, and watermark — preview the result live, and save
 every image back to your gallery.
 
-> **Single Image Processing** — a separate flow focused on editing one image at
-> a time (with tools that only make sense on a single photo) is planned and will
-> be documented here as it lands.
+> **Single Image Processing** — a separate flow for one photo at a time (cut-out,
+> portrait look, background blur, backdrops) lives in [README.studio.md](README.studio.md).
 
 ← Back to the [project overview](README.md). For the video flow, see
 [README.video.md](README.video.md).

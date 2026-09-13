@@ -7,7 +7,7 @@
     <string name="section_image_title">Bulk Image Processing</string>
     <string name="section_image_subtitle">Watermark, crop, filter, frame, and resize your photos</string>
     <string name="section_single_image_title">Single Image Processing</string>
-    <string name="section_single_image_subtitle">Portrait color, cut-out, and background removal for one photo</string>
+    <string name="section_single_image_subtitle">Layered editor: cut-out, portrait look, and backgrounds for one photo</string>
     <string name="section_video_title">Video Processing</string>
     <string name="section_video_subtitle">Trim, cut &amp; join, merge, overlay, and more</string>
     <string name="navigate_back">‹ Back</string>
@@ -371,6 +371,35 @@
     <string name="error_apply_effect">Couldn\'t apply the effect: %1$s</string>
     <string name="error_export_failed">Export failed: %1$s</string>
     <string name="error_cutout_subject">Couldn\'t cut out a subject: %1$s</string>
+
+    <!-- Studio (layered single-image editor) -->
+    <string name="studio_title">Studio</string>
+    <string name="studio_empty_hint">Pick a photo to start a layer stack.</string>
+    <string name="studio_layers">Layers</string>
+    <string name="studio_tools">Tools</string>
+    <string name="studio_cut_out">Cut out</string>
+    <string name="studio_cut_out_auto">Auto cut-out</string>
+    <string name="studio_cut_out_trace">Trace outline</string>
+    <string name="studio_trace_hint">Drag around the area you want to keep, then lift your finger.</string>
+    <string name="studio_cutout_review_hint">Drag the outline to adjust, then confirm.</string>
+    <string name="studio_cutout_confirm">Use this cut-out</string>
+    <string name="studio_trace_too_small">Trace a larger outline around the area.</string>
+    <string name="error_cutout_path">Couldn\'t cut out that selection: %1$s</string>
+    <string name="studio_portrait_look">Portrait look</string>
+    <string name="studio_portrait_look_desc">Keep the subject in color; turn the background black and white</string>
+    <string name="studio_background_blur">Background blur</string>
+    <string name="studio_background_blur_desc">Keep the subject sharp; blur the rest, still in color</string>
+    <string name="studio_backdrop_original">Original</string>
+    <string name="studio_layer_background">Background</string>
+    <string name="studio_layer_subject">Subject</string>
+    <string name="studio_layer_fill">Fill</string>
+    <string name="studio_layer_replacement">Background image</string>
+    <string name="studio_layer_adjustment">Portrait look</string>
+    <string name="studio_layer_generic">Layer</string>
+    <string name="cd_toggle_layer_visibility">Toggle visibility</string>
+    <string name="cd_delete_layer">Delete layer</string>
+    <string name="studio_finding_people">Isolating people…</string>
+    <string name="studio_choose_background_image">Choose background image</string>
 
     <!-- Settings -->
     <string name="settings_title">Settings</string>

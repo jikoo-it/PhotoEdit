@@ -4,10 +4,13 @@ import android.graphics.Bitmap
 import android.net.Uri
 import com.momi.watermarker.data.mlkit.SubjectSegmenter
 import com.momi.watermarker.data.rendering.CutoutComposer
+import com.momi.watermarker.data.rendering.MaskContour
+import com.momi.watermarker.data.rendering.PathCutout
 import com.momi.watermarker.data.storage.ImageStorage
 import com.momi.watermarker.di.IoDispatcher
 import com.momi.watermarker.domain.model.BackgroundMode
 import com.momi.watermarker.domain.model.CutoutRenderSpec
+import com.momi.watermarker.domain.model.NormalizedPoint
 import com.momi.watermarker.domain.repository.ImageCutoutRepository
 import com.momi.watermarker.domain.util.Outcome
 import kotlinx.coroutines.CancellationException
@@ -24,6 +27,7 @@ class ImageCutoutRepositoryImpl @Inject constructor(
     private val imageStorage: ImageStorage,
     private val segmenter: SubjectSegmenter,
     private val composer: CutoutComposer,
+    private val pathCutout: PathCutout,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : ImageCutoutRepository {
 
@@ -37,6 +41,55 @@ class ImageCutoutRepositoryImpl @Inject constructor(
                 val uri = imageStorage.writeToCache(
                     cutout,
                     prefix = "cutout",
+                    format = Bitmap.CompressFormat.PNG,
+                )
+                Outcome.Success(uri.toString())
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Outcome.Failure(t)
+            } finally {
+                source?.recycle()
+                cutout?.recycle()
+            }
+        }
+
+    override suspend fun proposeSubjectOutline(sourceUri: String): Outcome<List<NormalizedPoint>> =
+        withContext(dispatcher) {
+            var source: Bitmap? = null
+            var foreground: Bitmap? = null
+            try {
+                source = decodeBounded(sourceUri)
+                foreground = segmenter.cutout(source)
+                val outline = MaskContour.fromBitmap(foreground)
+                if (outline.isEmpty()) {
+                    Outcome.Failure(IllegalStateException("Couldn't trace a subject outline."))
+                } else {
+                    Outcome.Success(outline)
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                Outcome.Failure(t)
+            } finally {
+                source?.recycle()
+                foreground?.recycle()
+            }
+        }
+
+    override suspend fun cutoutPath(
+        sourceUri: String,
+        outline: List<NormalizedPoint>,
+    ): Outcome<String> =
+        withContext(dispatcher) {
+            var source: Bitmap? = null
+            var cutout: Bitmap? = null
+            try {
+                source = decodeBounded(sourceUri)
+                cutout = pathCutout.extract(source, outline)
+                val uri = imageStorage.writeToCache(
+                    cutout,
+                    prefix = "cutout_path",
                     format = Bitmap.CompressFormat.PNG,
                 )
                 Outcome.Success(uri.toString())

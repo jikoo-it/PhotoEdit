@@ -82,6 +82,29 @@ class DefaultPortraitEffectProcessor @Inject constructor(
         }
     }
 
+    override suspend fun extractForeground(bitmap: Bitmap): Bitmap {
+        val mask = segmenter.personMask(bitmap)
+        var foreground: Bitmap? = null
+        try {
+            feather(mask, featherRadius(max(bitmap.width, bitmap.height)))
+            foreground = bitmap.copy(Bitmap.Config.ARGB_8888, true)
+            Canvas(foreground).drawBitmap(
+                mask,
+                0f,
+                0f,
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+                },
+            )
+            return foreground
+        } catch (t: Throwable) {
+            foreground?.recycle()
+            throw t
+        } finally {
+            mask.recycle()
+        }
+    }
+
     /** A fully desaturated (grayscale) opaque copy of [src]. */
     private fun grayscale(src: Bitmap): Bitmap {
         val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
