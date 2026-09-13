@@ -1,10 +1,13 @@
-# MomiWaterMarker — Cut-out Studio
+# MomiWaterMarker — Cut-out (processor)
 
-The **Cut-out Studio** tool (under **Single Image Processing** on the launch
-screen; see the other flows in [README.md](README.md)) extracts the subject of one photo
-**entirely on-device** and lets you choose what sits behind it. Pick a photo,
-the subject is segmented once, then swap between backgrounds with a live
-preview and save.
+> **User-facing flow:** [Studio](README.studio.md) under **Single Image
+> Processing**. Auto cut-out traces an outline you can drag before confirming;
+> you can also trace by hand. This README is the ML note for subject
+> segmentation Studio still uses to propose that outline.
+
+Subject extraction runs **entirely on-device**. Segmentation (the expensive
+step) produces a foreground bitmap; Studio turns that into an editable outline
+rather than applying the cut immediately.
 
 ## How it works
 

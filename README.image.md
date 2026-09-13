@@ -9,6 +9,9 @@ every image back to your gallery.
 Need only resize, compress, or a file-size budget, without the rest of the
 editor? Use the dedicated **[Resize & Compress](README.resize.md)** flow.
 
+> **Single Image Processing** — a separate flow for one photo at a time (cut-out,
+> portrait look, background blur, backdrops) lives in [README.studio.md](README.studio.md).
+
 ← Back to the [project overview](README.md). For the video flow, see
 [README.video.md](README.video.md).
 

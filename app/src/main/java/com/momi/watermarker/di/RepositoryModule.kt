@@ -6,11 +6,13 @@ import com.momi.watermarker.data.repository.ImageCutoutRepositoryImpl
 import com.momi.watermarker.data.repository.ImageProcessingRepositoryImpl
 import com.momi.watermarker.data.repository.MediaRepositoryImpl
 import com.momi.watermarker.data.repository.PortraitEffectRepositoryImpl
+import com.momi.watermarker.data.repository.StudioRepositoryImpl
 import com.momi.watermarker.data.repository.ThemeRepositoryImpl
 import com.momi.watermarker.domain.repository.ImageCutoutRepository
 import com.momi.watermarker.domain.repository.ImageProcessingRepository
 import com.momi.watermarker.domain.repository.MediaRepository
 import com.momi.watermarker.domain.repository.PortraitEffectRepository
+import com.momi.watermarker.domain.repository.StudioRepository
 import com.momi.watermarker.domain.repository.ThemeRepository
 import dagger.Binds
 import dagger.Module
@@ -58,4 +60,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindThemeRepository(impl: ThemeRepositoryImpl): ThemeRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindStudioRepository(impl: StudioRepositoryImpl): StudioRepository
 }

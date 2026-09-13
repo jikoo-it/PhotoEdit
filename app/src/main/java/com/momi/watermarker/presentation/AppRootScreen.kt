@@ -33,7 +33,7 @@ import com.momi.watermarker.R
 import com.momi.watermarker.presentation.batch.BatchResizeScreen
 import com.momi.watermarker.presentation.editor.EditorScreen
 import com.momi.watermarker.presentation.settings.SettingsScreen
-import com.momi.watermarker.presentation.single.SingleImageScreen
+import com.momi.watermarker.presentation.studio.StudioScreen
 import com.momi.watermarker.presentation.video.VideoEditorScreen
 
 /** The top-level flows the app offers. */
@@ -77,7 +77,7 @@ fun AppRootScreen(modifier: Modifier = Modifier) {
         )
 
         section == AppSection.SINGLE_IMAGE -> {
-            SingleImageScreen(modifier = modifier, onExit = { section = null })
+            StudioScreen(modifier = modifier, onExit = { section = null })
         }
 
         section == AppSection.VIDEO -> VideoEditorScreen(
